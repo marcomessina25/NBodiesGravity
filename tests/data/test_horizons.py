@@ -1,6 +1,7 @@
 import pytest
 import responses as resp_mock
 from datetime import date
+from urllib.parse import urlparse, parse_qs
 from nbodiesgravity.data.horizons import fetch, HorizonsError, HORIZONS_URL
 
 # Minimal realistic Horizons vector-table response
@@ -45,3 +46,14 @@ def test_fetch_raises_when_soe_missing():
     resp_mock.add(resp_mock.GET, HORIZONS_URL, json={"result": "no data here"}, status=200)
     with pytest.raises(HorizonsError, match="SOE"):
         fetch("399", date(2000, 1, 1))
+
+
+@resp_mock.activate
+def test_fetch_stop_time_is_one_day_after_start():
+    resp_mock.add(resp_mock.GET, HORIZONS_URL, json={"result": _MOCK_RESULT}, status=200)
+    fetch("399", date(2000, 1, 1))
+    qs = parse_qs(urlparse(resp_mock.calls[0].request.url).query)
+    start = qs["START_TIME"][0].strip("'")
+    stop = qs["STOP_TIME"][0].strip("'")
+    assert start == "2000-01-01"
+    assert stop == "2000-01-02"
