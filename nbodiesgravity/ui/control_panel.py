@@ -15,6 +15,7 @@ class ControlPanel(QWidget):
     timescale_changed = pyqtSignal(float)     # simulated days per real second
     center_changed = pyqtSignal(str)          # new center body name
     play_toggled = pyqtSignal(bool)           # True = playing
+    clear_trails_requested = pyqtSignal()    # user clicked "Clear Trails"
 
     _PRESETS: list[tuple[str, float]] = [
         ("1 s = 1 day",   1.0),
@@ -38,6 +39,10 @@ class ControlPanel(QWidget):
         self._date_edit.setCalendarPopup(True)
         self._date_edit.editingFinished.connect(self._on_date_committed)
         layout.addWidget(self._date_edit)
+
+        self._sim_date_label = QLabel("→  –")
+        self._sim_date_label.setMinimumWidth(95)
+        layout.addWidget(self._sim_date_label)
 
         layout.addSpacing(12)
 
@@ -73,6 +78,11 @@ class ControlPanel(QWidget):
         self._center_combo.currentTextChanged.connect(self.center_changed)
         layout.addWidget(self._center_combo)
 
+        layout.addSpacing(8)
+        self._clear_trails_btn = QPushButton("Clear Trails")
+        self._clear_trails_btn.clicked.connect(self.clear_trails_requested)
+        layout.addWidget(self._clear_trails_btn)
+
     # Public API
     def set_body_names(self, names: list[str]) -> None:
         self._center_combo.blockSignals(True)
@@ -87,6 +97,10 @@ class ControlPanel(QWidget):
     def set_playing(self, playing: bool) -> None:
         self._playing = playing
         self._play_btn.setText("⏸  Pause" if playing else "▶  Play")
+
+    def set_sim_date(self, text: str) -> None:
+        """Update the live simulation date label. Call with a 'YYYY-MM-DD' string."""
+        self._sim_date_label.setText(f"→  {text}")
 
     # Private slots
     def _on_date_committed(self) -> None:
