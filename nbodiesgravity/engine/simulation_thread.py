@@ -65,6 +65,7 @@ class SimulationThread(QThread):
         with self._lock:
             self._system = system
             self.latest_snapshot = system.snapshot()
+        self._elapsed_days = 0.0   # reset date counter to match the new epoch
 
     def stop_thread(self) -> None:
         self._running = False

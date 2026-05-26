@@ -331,6 +331,7 @@ class MainWindow(QMainWindow):
         self._ctrl.set_sim_date(current.strftime("%Y-%m-%d"))
 
     def closeEvent(self, event) -> None:
+        self._date_timer.stop()
         if self._sim:
             self._sim.stop_thread()
         super().closeEvent(event)
