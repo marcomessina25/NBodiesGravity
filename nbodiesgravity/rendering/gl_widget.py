@@ -101,6 +101,11 @@ class GLWidget(QOpenGLWidget):
                     tb.initialize()
                 self._trail_buffers[info.name] = tb
 
+    def clear_trails(self) -> None:
+        """Reset all trail ring buffers. Call on center change or user request."""
+        for tb in self._trail_buffers.values():
+            tb.reset()
+
     # ---------------------------------------------------------------
     # QOpenGLWidget callbacks
     # ---------------------------------------------------------------
@@ -142,9 +147,9 @@ class GLWidget(QOpenGLWidget):
                 tb.initialize()
                 self._trail_buffers[state.name] = tb
 
-        # Accumulate trail positions
+        # Accumulate trail positions (relative to current center)
         for state in snap:
-            self._trail_buffers[state.name].append(state.pos)
+            self._trail_buffers[state.name].append(state.pos, self.camera.center_pos)
 
         # --- Trails ---
         glUseProgram(self._line_prog)
@@ -152,7 +157,7 @@ class GLWidget(QOpenGLWidget):
             glGetUniformLocation(self._line_prog, "uViewProjection"),
             1, GL_FALSE, vp.T,
         )
-        glUniform3f(glGetUniformLocation(self._line_prog, "uCenterOffset"), *offset)
+        glUniform3f(glGetUniformLocation(self._line_prog, "uCenterOffset"), 0.0, 0.0, 0.0)
         glUniform1f(glGetUniformLocation(self._line_prog, "uAlpha"), 0.55)
         for state in snap:
             body = (self._simulation_thread.system.get_body(state.name)
