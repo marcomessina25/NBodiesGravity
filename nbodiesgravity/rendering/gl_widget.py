@@ -96,10 +96,10 @@ class GLWidget(QOpenGLWidget):
         self._display_info = {info.name: info for info in infos}
         for info in infos:
             if info.name not in self._trail_buffers:
-                tb = TrailBuffer(info.color)
-                if self._sphere_prog:   # GL context already exists
-                    tb.initialize()
-                self._trail_buffers[info.name] = tb
+                # GPU initialization is deferred to paintGL where the GL
+                # context is guaranteed current.  Do NOT call tb.initialize()
+                # here — this method may be called from outside paintGL.
+                self._trail_buffers[info.name] = TrailBuffer(info.color)
 
     def clear_trails(self) -> None:
         """Reset all trail ring buffers. Call on center change or user request."""
@@ -138,14 +138,18 @@ class GLWidget(QOpenGLWidget):
         view = self.camera.view_matrix()
         vp = (self._proj @ view).astype(np.float32)
 
-        # Lazy-init trail buffers for bodies added after GL init
+        # Lazy-init trail buffers for bodies added after GL init.
+        # Also catches buffers created by set_display_info (called outside
+        # paintGL where the GL context was not current) whose VAO is still None.
         for state in snap:
-            if state.name not in self._trail_buffers:
+            tb = self._trail_buffers.get(state.name)
+            if tb is None:
                 info = self._display_info.get(state.name)
                 color = info.color if info else (1.0, 1.0, 1.0)
                 tb = TrailBuffer(color)
-                tb.initialize()
                 self._trail_buffers[state.name] = tb
+            if tb._vao is None:
+                tb.initialize()
 
         # Accumulate trail positions (relative to current center)
         for state in snap:
