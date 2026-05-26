@@ -15,7 +15,7 @@ class ControlPanel(QWidget):
     timescale_changed = pyqtSignal(float)     # simulated days per real second
     center_changed = pyqtSignal(str)          # new center body name
     play_toggled = pyqtSignal(bool)           # True = playing
-    clear_trails_requested = pyqtSignal()    # user clicked "Clear Trails"
+    clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
 
     _PRESETS: list[tuple[str, float]] = [
         ("1 s = 1 day",   1.0),
