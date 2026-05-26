@@ -149,7 +149,7 @@ class GLWidget(QOpenGLWidget):
 
         # Accumulate trail positions (relative to current center)
         for state in snap:
-            self._trail_buffers[state.name].append(state.pos, self.camera.center_pos)
+            self._trail_buffers[state.name].append(state.pos, offset)
 
         # --- Trails ---
         glUseProgram(self._line_prog)
@@ -157,6 +157,7 @@ class GLWidget(QOpenGLWidget):
             glGetUniformLocation(self._line_prog, "uViewProjection"),
             1, GL_FALSE, vp.T,
         )
+        # uCenterOffset zeroed: relative offset is baked into TrailBuffer at append time
         glUniform3f(glGetUniformLocation(self._line_prog, "uCenterOffset"), 0.0, 0.0, 0.0)
         glUniform1f(glGetUniformLocation(self._line_prog, "uAlpha"), 0.55)
         for state in snap:
