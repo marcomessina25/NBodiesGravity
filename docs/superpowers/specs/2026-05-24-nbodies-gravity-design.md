@@ -43,7 +43,8 @@ nbodiesgravity/
 │   ├── main_window.py             # QMainWindow — menus, toolbar, layout
 │   ├── control_panel.py           # Date picker, play/pause, time-scale slider, center-on picker
 │   ├── body_list_panel.py         # Scrollable body list with trail toggles
-│   └── body_editor_dialog.py      # QDialog for add / edit / delete body
+│   ├── body_editor_dialog.py      # QDialog for add / edit / delete body
+│   └── date_loader_worker.py      # QThread worker — fetches JPL vectors for all bodies at a date
 └── rendering/
     ├── gl_widget.py               # QOpenGLWidget — owns GL context, drives draw calls at 60 FPS
     ├── camera.py                  # Camera state: center body, azimuth, elevation, zoom
@@ -56,6 +57,9 @@ nbodiesgravity/
 ---
 
 ## 2. Physics Engine
+
+### `BodyState` (engine/body.py)
+A lightweight frozen dataclass (or `NamedTuple`) used as the thread-safe snapshot type. Fields: `name: str`, `pos: np.ndarray (3,)`, `vel: np.ndarray (3,)`. Arrays are copies, not views, so the renderer can read them without locks.
 
 ### `CelestialBody` (`engine/body.py`)
 A dataclass with fields:
@@ -100,6 +104,7 @@ A `QThread` that runs `system.step(dt)` in a tight loop. Emits `snapshot_ready(l
 - `set_timescale(days_per_second: float)` — recalculates `dt = days_per_second / 120` (120 sub-steps/second target)
 - `pause()` / `resume()` — thread-safe stop/start
 - `reset(system: SolarSystem)` — replaces the system (only callable while paused)
+- `latest_snapshot: list[BodyState]` — Python attribute written by the physics thread after each step; Python's GIL makes single-attribute reads atomic, so no explicit lock is needed for the renderer to read it
 - Auto-pauses and emits `blow_up_detected` if any body position exceeds 1000 AU
 
 ---
@@ -277,7 +282,7 @@ QTimer fires → GLWidget.paintGL()
 | Package | Purpose |
 |---|---|
 | `numpy` | Vectorized physics math |
-| `PyQt6` or `PySide6` | UI framework + OpenGL widget |
+| `PyQt6` | UI framework + OpenGL widget |
 | `PyOpenGL` | OpenGL bindings |
 | `requests` | JPL Horizons HTTP client |
 | `pytest` | Headless engine tests |
