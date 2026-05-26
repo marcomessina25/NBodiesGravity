@@ -8,7 +8,7 @@ Validation (OK button disabled until all pass):
 from __future__ import annotations
 import numpy as np
 from PyQt6.QtWidgets import (
-    QDialog, QFormLayout, QDialogButtonBox, QLineEdit,
+    QComboBox, QDialog, QFormLayout, QDialogButtonBox, QLineEdit,
     QDoubleSpinBox, QPushButton, QLabel, QColorDialog,
     QHBoxLayout, QWidget,
 )
@@ -21,11 +21,15 @@ class BodyEditorDialog(QDialog):
         self,
         existing_names: list[str],
         body: CelestialBody | None = None,
+        template_bodies: list[CelestialBody] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._existing_names = existing_names
         self._edit_mode = body is not None
+        self._template_bodies: dict[str, CelestialBody] = (
+            {b.name: b for b in template_bodies} if template_bodies else {}
+        )
         self._color: tuple[float, float, float] = body.color if body else (1.0, 1.0, 1.0)
         self.setWindowTitle("Edit Body" if self._edit_mode else "Add Body")
         self.setModal(True)
@@ -46,6 +50,36 @@ class BodyEditorDialog(QDialog):
     def _build_ui(self, body: CelestialBody | None) -> None:
         form = QFormLayout(self)
 
+        # ---- Template selector (Add mode only) ----
+        if not self._edit_mode and self._template_bodies:
+            self._template_combo = QComboBox()
+            self._template_combo.addItem("Blank")
+            for name in self._template_bodies:
+                self._template_combo.addItem(name)
+            if len(self._template_bodies) >= 2:
+                self._template_combo.addItem("Average of two…")
+            self._template_combo.currentTextChanged.connect(self._on_template_changed)
+            form.addRow("Template:", self._template_combo)
+
+            if len(self._template_bodies) >= 2:
+                self._avg_container = QWidget()
+                avg_inner = QFormLayout(self._avg_container)
+                avg_inner.setContentsMargins(0, 0, 0, 0)
+                self._avg_a_combo = QComboBox()
+                self._avg_b_combo = QComboBox()
+                for name in self._template_bodies:
+                    self._avg_a_combo.addItem(name)
+                    self._avg_b_combo.addItem(name)
+                self._avg_a_combo.setCurrentIndex(-1)
+                self._avg_b_combo.setCurrentIndex(-1)
+                self._avg_a_combo.currentTextChanged.connect(self._on_avg_selection_changed)
+                self._avg_b_combo.currentTextChanged.connect(self._on_avg_selection_changed)
+                avg_inner.addRow("Body A:", self._avg_a_combo)
+                avg_inner.addRow("Body B:", self._avg_b_combo)
+                self._avg_container.setVisible(False)
+                form.addRow(self._avg_container)
+
+        # ---- Main fields ----
         self._name_edit = QLineEdit(body.name if body else "")
         self._name_edit.textChanged.connect(self._validate)
         form.addRow("Name:", self._name_edit)
@@ -121,6 +155,76 @@ class BodyEditorDialog(QDialog):
             err = "Radius must be > 0."
         self._err.setText(err)
         self._btns.button(QDialogButtonBox.StandardButton.Ok).setEnabled(err == "")
+
+    def _on_template_changed(self, text: str) -> None:
+        has_avg = hasattr(self, "_avg_container")
+        if has_avg and text == "Average of two…":
+            self._avg_container.setVisible(True)
+            self._avg_a_combo.setCurrentIndex(-1)
+            self._avg_b_combo.setCurrentIndex(-1)
+            return
+        if has_avg:
+            self._avg_container.setVisible(False)
+        if text == "Blank":
+            self._clear_fields()
+        elif text in self._template_bodies:
+            self._fill_from_body(self._template_bodies[text])
+
+    def _on_avg_selection_changed(self) -> None:
+        a_name = self._avg_a_combo.currentText()
+        b_name = self._avg_b_combo.currentText()
+        if (a_name and b_name
+                and a_name in self._template_bodies
+                and b_name in self._template_bodies):
+            self._fill_from_average(
+                self._template_bodies[a_name],
+                self._template_bodies[b_name],
+            )
+
+    def _clear_fields(self) -> None:
+        self._name_edit.clear()
+        self._mass_spin.setValue(1e22)
+        self._radius_spin.setValue(1000.0)
+        self._px.setValue(0.0)
+        self._py.setValue(0.0)
+        self._pz.setValue(0.0)
+        self._vx.setValue(0.0)
+        self._vy.setValue(0.0)
+        self._vz.setValue(0.0)
+        self._color = (1.0, 1.0, 1.0)
+        self._update_color_btn()
+
+    def _fill_from_body(self, body: CelestialBody) -> None:
+        self._name_edit.clear()
+        self._mass_spin.setValue(body.mass)
+        self._radius_spin.setValue(body.radius)
+        self._px.setValue(float(body.pos[0]))
+        self._py.setValue(float(body.pos[1]))
+        self._pz.setValue(float(body.pos[2]))
+        self._vx.setValue(float(body.vel[0]))
+        self._vy.setValue(float(body.vel[1]))
+        self._vz.setValue(float(body.vel[2]))
+        self._color = body.color
+        self._update_color_btn()
+
+    def _fill_from_average(self, a: CelestialBody, b: CelestialBody) -> None:
+        avg_pos = (a.pos + b.pos) / 2
+        avg_vel = (a.vel + b.vel) / 2
+        self._name_edit.clear()
+        self._mass_spin.setValue((a.mass + b.mass) / 2)
+        self._radius_spin.setValue((a.radius + b.radius) / 2)
+        self._px.setValue(float(avg_pos[0]))
+        self._py.setValue(float(avg_pos[1]))
+        self._pz.setValue(float(avg_pos[2]))
+        self._vx.setValue(float(avg_vel[0]))
+        self._vy.setValue(float(avg_vel[1]))
+        self._vz.setValue(float(avg_vel[2]))
+        self._color = (
+            (a.color[0] + b.color[0]) / 2,
+            (a.color[1] + b.color[1]) / 2,
+            (a.color[2] + b.color[2]) / 2,
+        )
+        self._update_color_btn()
 
 
 def _sci_spin(min_v: float, max_v: float, value: float) -> QDoubleSpinBox:
