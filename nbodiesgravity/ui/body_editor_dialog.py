@@ -176,6 +176,8 @@ class BodyEditorDialog(QDialog):
         if (a_name and b_name
                 and a_name in self._template_bodies
                 and b_name in self._template_bodies):
+            # Same body for A and B is intentionally accepted: (x+x)/2 == x,
+            # producing the same result as a direct copy (Blank + manual entry).
             self._fill_from_average(
                 self._template_bodies[a_name],
                 self._template_bodies[b_name],
@@ -193,6 +195,7 @@ class BodyEditorDialog(QDialog):
         self._vz.setValue(0.0)
         self._color = (1.0, 1.0, 1.0)
         self._update_color_btn()
+        self._validate()
 
     def _fill_from_body(self, body: CelestialBody) -> None:
         self._name_edit.clear()
@@ -206,6 +209,7 @@ class BodyEditorDialog(QDialog):
         self._vz.setValue(float(body.vel[2]))
         self._color = body.color
         self._update_color_btn()
+        self._validate()
 
     def _fill_from_average(self, a: CelestialBody, b: CelestialBody) -> None:
         avg_pos = (a.pos + b.pos) / 2
@@ -225,6 +229,7 @@ class BodyEditorDialog(QDialog):
             (a.color[2] + b.color[2]) / 2,
         )
         self._update_color_btn()
+        self._validate()
 
 
 def _sci_spin(min_v: float, max_v: float, value: float) -> QDoubleSpinBox:
