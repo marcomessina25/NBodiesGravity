@@ -5,8 +5,11 @@ center_pos from every body position before passing to OpenGL — the
 physics engine is never modified by view changes.
 """
 from __future__ import annotations
+from typing import TYPE_CHECKING
 import numpy as np
-from nbodiesgravity.engine.body import BodyState
+
+if TYPE_CHECKING:
+    from nbodiesgravity.engine.body import BodyState
 
 
 class Camera:
