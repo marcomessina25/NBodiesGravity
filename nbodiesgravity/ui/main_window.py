@@ -1,7 +1,7 @@
 """QMainWindow assembling all panels and wiring all signals/slots."""
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QSplitter, QVBoxLayout,
     QProgressDialog, QFileDialog, QMessageBox, QStatusBar,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 from nbodiesgravity.data.loader import load_default_system
 from nbodiesgravity.engine.body import CelestialBody
@@ -32,6 +32,9 @@ class MainWindow(QMainWindow):
         self._loader: DateLoaderWorker | None = None
         self._progress: QProgressDialog | None = None
         self._last_epoch = datetime(2000, 1, 1)
+        self._date_timer = QTimer(self)
+        self._date_timer.setInterval(250)   # 4 Hz — invisible to the user
+        self._date_timer.timeout.connect(self._update_sim_date)
         self._build_ui()
         self._load_system(load_default_system())
 
@@ -71,6 +74,9 @@ class MainWindow(QMainWindow):
         self._body_list.body_selected.connect(self._gl.camera.set_center)
         self._body_list.body_edit_requested.connect(self._edit_body)
         self._body_list.trail_toggled.connect(self._on_trail_toggled)
+        self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
+        self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
+        self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -110,6 +116,9 @@ class MainWindow(QMainWindow):
         self._ctrl.set_playing(False)
         self._body_list.populate(system.bodies)
         self._sim.start()
+        self._gl.clear_trails()
+        self._ctrl.set_sim_date("–")
+        self._date_timer.start()
         self.statusBar().showMessage(f"Loaded {len(system.bodies)} bodies.")
 
     # ----------------------------------------------------------------
@@ -167,7 +176,11 @@ class MainWindow(QMainWindow):
         was_playing = self._sim.is_playing
         self._sim.pause()
         existing = [b.name for b in self._sim.system.bodies]
-        dlg = BodyEditorDialog(existing_names=existing, parent=self)
+        dlg = BodyEditorDialog(
+            existing_names=existing,
+            template_bodies=self._sim.system.bodies,
+            parent=self,
+        )
         if dlg.exec() == BodyEditorDialog.DialogCode.Accepted:
             body = dlg.result_body()
             self._sim.system.add_body(body)
@@ -310,6 +323,12 @@ class MainWindow(QMainWindow):
     def _on_blow_up(self) -> None:
         self._ctrl.set_playing(False)
         self.statusBar().showMessage("⚠ Blow-up detected (body > 1000 AU). Simulation paused.")
+
+    def _update_sim_date(self) -> None:
+        if self._sim is None:
+            return
+        current = self._last_epoch + timedelta(days=self._sim.elapsed_days)
+        self._ctrl.set_sim_date(current.strftime("%Y-%m-%d"))
 
     def closeEvent(self, event) -> None:
         if self._sim:
