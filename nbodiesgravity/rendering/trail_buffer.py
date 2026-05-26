@@ -43,12 +43,19 @@ class TrailBuffer:
         glEnableVertexAttribArray(0)
         glBindVertexArray(0)
 
-    def append(self, pos: np.ndarray) -> None:
-        """Add a position to the ring buffer. Render-thread only."""
-        self._buf[self._head] = pos.astype(np.float32)
+    def append(self, pos: np.ndarray, center_pos: np.ndarray) -> None:
+        """Add pos relative to center_pos to the ring buffer. Render-thread only."""
+        self._buf[self._head] = (pos - center_pos).astype(np.float32)
         self._head = (self._head + 1) % MAX_TRAIL_POINTS
         if self._count < MAX_TRAIL_POINTS:
             self._count += 1
+        self._dirty = True
+
+    def reset(self) -> None:
+        """Clear all trail history. Call on center change or user request."""
+        self._buf[:] = 0.0
+        self._head = 0
+        self._count = 0
         self._dirty = True
 
     def draw(self) -> None:
