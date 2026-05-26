@@ -18,12 +18,17 @@ class BodyDisplayInfo:
 
     @property
     def display_radius(self) -> float:
-        """Visible radius in AU.
+        """Physical display radius in AU (camera-independent).
 
-        Applies a log scale so tiny moons and giant planets are both
-        legible without dominating the view.
-        Maps log10(radius_km) from [2, 6] → [0.01, 0.25] AU.
+        Log-scale so moons and giants are proportionally distinguishable.
+        Maps log10(radius_km) from [2, 6] → [0.0003, 0.003] AU.
+
+        This keeps bodies smaller than typical moon orbital distances
+        (e.g. Earth/Moon gap: ~0.00257 AU, Earth radius here: ~0.00165 AU)
+        so moons are visible outside their parent planet when zoomed in.
+        A camera-distance floor is applied in GLWidget to keep bodies
+        visible when zoomed out to the full solar-system view.
         """
         log_r = math.log10(max(self.radius_km, 1.0))
         t = max(0.0, min(1.0, (log_r - 2.0) / (6.0 - 2.0)))
-        return 0.01 + t * (0.25 - 0.01)
+        return 0.0003 + t * (0.003 - 0.0003)
