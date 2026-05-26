@@ -53,6 +53,8 @@ class TrailBuffer:
 
     def draw(self) -> None:
         """Upload if dirty and draw. GL thread only."""
+        if self._vao is None:
+            return
         if self._count < 2:
             return
         if self._dirty:
