@@ -1,13 +1,20 @@
-"""Bottom control bar: epoch date picker, speed presets, center picker, play/pause."""
+"""Bottom control bar: epoch date picker, speed slider, center picker, play/pause."""
 from __future__ import annotations
+import math
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QDateEdit, QComboBox,
-    QPushButton, QLineEdit, QSizePolicy,
+    QPushButton, QSlider, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
-from PyQt6.QtGui import QDoubleValidator
+
+# Speed slider covers 1 h/s … 1 y/s on a log10 scale
+_LOG_MIN: float = math.log10(1.0 / 24.0)   # log10(days) for 1 h/s
+_LOG_MAX: float = math.log10(365.25)         # log10(days) for 1 y/s
+_SLIDER_STEPS: int = 200                     # integer ticks across the range
+# Default: 1 real second = 1 simulated day (slider position ≈ 35 %)
+_DEFAULT_DAYS: float = 1.0
 
 
 class ControlPanel(QWidget):
@@ -16,13 +23,6 @@ class ControlPanel(QWidget):
     center_changed = pyqtSignal(str)          # new center body name
     play_toggled = pyqtSignal(bool)           # True = playing
     clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
-
-    _PRESETS: list[tuple[str, float]] = [
-        ("1 s = 1 day",   1.0),
-        ("1 s = 1 month", 30.0),
-        ("1 s = 1 year",  365.25),
-        ("Custom",        0.0),
-    ]
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -54,19 +54,18 @@ class ControlPanel(QWidget):
         layout.addSpacing(12)
 
         layout.addWidget(QLabel("Speed:"))
-        self._preset_combo = QComboBox()
-        for label, _ in self._PRESETS:
-            self._preset_combo.addItem(label)
-        self._preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        layout.addWidget(self._preset_combo)
+        self._speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self._speed_slider.setRange(0, _SLIDER_STEPS)
+        self._speed_slider.setSingleStep(1)
+        self._speed_slider.setPageStep(10)
+        self._speed_slider.setFixedWidth(160)
+        self._speed_slider.setValue(self._days_to_slider(_DEFAULT_DAYS))
+        self._speed_slider.valueChanged.connect(self._on_speed_changed)
+        layout.addWidget(self._speed_slider)
 
-        self._custom_edit = QLineEdit("1.0")
-        self._custom_edit.setFixedWidth(70)
-        self._custom_edit.setPlaceholderText("days/s")
-        self._custom_edit.setValidator(QDoubleValidator(0.001, 1e6, 3))
-        self._custom_edit.setVisible(False)
-        self._custom_edit.returnPressed.connect(self._on_custom_timescale)
-        layout.addWidget(self._custom_edit)
+        self._speed_label = QLabel(self._days_to_label(_DEFAULT_DAYS))
+        self._speed_label.setMinimumWidth(100)
+        layout.addWidget(self._speed_label)
 
         layout.addSpacing(12)
 
@@ -112,17 +111,36 @@ class ControlPanel(QWidget):
         self.set_playing(self._playing)
         self.play_toggled.emit(self._playing)
 
-    def _on_preset_changed(self, idx: int) -> None:
-        label, value = self._PRESETS[idx]
-        is_custom = label == "Custom"
-        self._custom_edit.setVisible(is_custom)
-        if not is_custom:
-            self.timescale_changed.emit(value)
+    def _on_speed_changed(self, pos: int) -> None:
+        days = self._slider_to_days(pos)
+        self._speed_label.setText(self._days_to_label(days))
+        self.timescale_changed.emit(days)
 
-    def _on_custom_timescale(self) -> None:
-        try:
-            v = float(self._custom_edit.text())
-            if v > 0:
-                self.timescale_changed.emit(v)
-        except ValueError:
-            pass
+    # ----------------------------------------------------------------
+    # Speed scale helpers
+    # ----------------------------------------------------------------
+
+    @staticmethod
+    def _slider_to_days(pos: int) -> float:
+        """Map slider position [0, _SLIDER_STEPS] → days/real-second (log scale)."""
+        t = pos / _SLIDER_STEPS
+        return 10.0 ** (_LOG_MIN + t * (_LOG_MAX - _LOG_MIN))
+
+    @staticmethod
+    def _days_to_slider(days: float) -> int:
+        """Inverse of _slider_to_days — used to set slider from a known days value."""
+        t = (math.log10(max(days, 10.0 ** _LOG_MIN)) - _LOG_MIN) / (_LOG_MAX - _LOG_MIN)
+        return round(max(0, min(_SLIDER_STEPS, t * _SLIDER_STEPS)))
+
+    @staticmethod
+    def _days_to_label(days: float) -> str:
+        """Human-readable speed string, auto-selecting the most natural unit."""
+        hours = days * 24.0
+        if hours < 23.9:
+            return f"1s = {hours:.1f}h"
+        if days < 29.5:
+            return f"1s = {days:.1f}d"
+        months = days / 30.4375
+        if months < 11.5:
+            return f"1s = {months:.1f}mo"
+        return f"1s = {days / 365.25:.2f}y"
