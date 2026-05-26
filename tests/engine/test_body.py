@@ -28,7 +28,9 @@ def test_celestial_body_snapshot_is_copy():
     assert snap.name == "Earth"
     assert np.allclose(snap.pos, [1.0, 0.0, 0.0])
     body.pos[0] = 99.0       # mutate the body
-    assert snap.pos[0] == 1.0  # snapshot must not change
+    assert snap.pos[0] == 1.0  # snapshot pos must not change
+    body.vel[0] = 99.0       # mutate velocity
+    assert snap.vel[0] == 0.0  # snapshot vel must also be isolated
 
 
 def test_celestial_body_show_trail_default():
