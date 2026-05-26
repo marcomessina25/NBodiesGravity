@@ -115,10 +115,10 @@ class MainWindow(QMainWindow):
         self._ctrl.set_body_names([b.name for b in system.bodies])
         self._ctrl.set_playing(False)
         self._body_list.populate(system.bodies)
-        self._sim.start()
-        self._gl.clear_trails()
+        self._gl.clear_trails()         # reset trails BEFORE thread writes new ones
         self._ctrl.set_sim_date("–")
         self._date_timer.start()
+        self._sim.start()
         self.statusBar().showMessage(f"Loaded {len(system.bodies)} bodies.")
 
     # ----------------------------------------------------------------
