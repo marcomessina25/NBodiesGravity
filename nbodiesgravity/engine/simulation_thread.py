@@ -36,6 +36,7 @@ class SimulationThread(QThread):
         self._running: bool = False
         self._lock = threading.Lock()
         self.latest_snapshot: list[BodyState] = system.snapshot()
+        self._elapsed_days: float = 0.0
 
     @property
     def is_playing(self) -> bool:
@@ -44,6 +45,11 @@ class SimulationThread(QThread):
     @property
     def system(self) -> SolarSystem:
         return self._system
+
+    @property
+    def elapsed_days(self) -> float:
+        """Simulated days elapsed since last system load. GIL-safe float read."""
+        return self._elapsed_days
 
     def set_timescale(self, days_per_second: float) -> None:
         self._timescale = max(days_per_second, 1e-3)
@@ -74,7 +80,8 @@ class SimulationThread(QThread):
             with self._lock:
                 self._system.step(dt)
                 snap = self._system.snapshot()
-            self.latest_snapshot = snap   # atomic reference swap (GIL)
+            self._elapsed_days += dt          # GIL-safe: single float write, one writer
+            self.latest_snapshot = snap       # atomic reference swap (GIL)
             self.snapshot_ready.emit(snap)
             if any(float(np.linalg.norm(s.pos)) > 1000.0 for s in snap):
                 self._paused = True
