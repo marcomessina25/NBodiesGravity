@@ -7,7 +7,7 @@ API docs: https://ssd.jpl.nasa.gov/horizons/app.html
 """
 from __future__ import annotations
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import requests
 
@@ -41,7 +41,8 @@ def fetch(body_id: str, epoch_date: date) -> dict:
     ------
     HorizonsError on network failure, API error, or unparseable response.
     """
-    date_str = epoch_date.strftime("%Y-%m-%d")
+    start_str = epoch_date.strftime("%Y-%m-%d")
+    stop_str = (epoch_date + timedelta(days=1)).strftime("%Y-%m-%d")
     params = {
         "format": "json",
         "COMMAND": f"'{body_id}'",
@@ -49,8 +50,8 @@ def fetch(body_id: str, epoch_date: date) -> dict:
         "MAKE_EPHEM": "YES",
         "EPHEM_TYPE": "VECTORS",
         "CENTER": "'500@0'",
-        "START_TIME": f"'{date_str}'",
-        "STOP_TIME": f"'{date_str}'",
+        "START_TIME": f"'{start_str}'",
+        "STOP_TIME": f"'{stop_str}'",
         "STEP_SIZE": "'1 d'",
         "VEC_TABLE": "'2'",
         "OUT_UNITS": "'AU-D'",
