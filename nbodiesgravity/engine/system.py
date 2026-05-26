@@ -45,6 +45,7 @@ class SolarSystem:
         self._bodies = [b for b in self._bodies if b.name != name]
 
     def get_body(self, name: str) -> CelestialBody | None:
+        """Return the body with the given name, or None if not found."""
         for b in self._bodies:
             if b.name == name:
                 return b
