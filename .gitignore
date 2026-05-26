@@ -1,0 +1,28 @@
+# Superpowers brainstorming session files
+.superpowers/
+
+# Claude Code project files
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+*.egg
+
+# Conda
+.conda/
+
+# Local cache
+.nbodiesgravity/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
