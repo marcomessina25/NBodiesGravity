@@ -1,6 +1,9 @@
 # Superpowers brainstorming session files
 .superpowers/
 
+# Git worktrees
+.worktrees/
+
 # Claude Code project files
 .claude/
 
