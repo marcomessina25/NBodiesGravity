@@ -182,6 +182,8 @@ class MainWindow(QMainWindow):
         self._sim.pause()
         body = self._sim.system.get_body(name)
         if body is None:
+            if was_playing:
+                self._sim.resume()
             return
         existing = [b.name for b in self._sim.system.bodies if b.name != name]
         dlg = BodyEditorDialog(existing_names=existing, body=body, parent=self)
