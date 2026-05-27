@@ -23,7 +23,7 @@ Always push to the current branch directly. If the current branch is `main` or `
 
 ### 3. Dependency freeze
 
-Stack is Python 3.11, PyQt6, PyOpenGL, NumPy. Do not introduce new Python dependencies without explicit user approval. If a new dependency is approved, update `environment.yml` before committing.
+Stack is Python 3.12, PyQt6, PyOpenGL, NumPy. Do not introduce new Python dependencies without explicit user approval. If a new dependency is approved, update `environment.yml` before committing.
 
 ---
 
@@ -40,7 +40,7 @@ N-body gravitational simulation desktop application. A background QThread runs t
 
 | Layer | Technology |
 |---|---|
-| Language | Python 3.11 |
+| Language | Python 3.12 |
 | UI framework | PyQt6 6.5+ |
 | 3D rendering | PyOpenGL (OpenGL 3.3 Core Profile) |
 | Numerics | NumPy |

@@ -1,0 +1,7 @@
+# Treat all markdown and common text files as UTF-8 text
+*.md    text eol=lf
+*.py    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.txt   text eol=lf
