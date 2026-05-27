@@ -86,7 +86,7 @@ class GLWidget(QOpenGLWidget):
         self._last_mouse_btn = None
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update)
-        self._timer.start(16)   # ~60 FPS
+        self._timer.start(8)    # ~120 FPS
 
     def set_simulation_thread(self, thread) -> None:
         self._simulation_thread = thread
