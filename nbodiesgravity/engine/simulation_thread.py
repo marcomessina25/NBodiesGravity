@@ -1,6 +1,7 @@
 """QThread that drives the physics simulation loop.
 
-Calls SolarSystem.step(dt) at ~120 steps/second and keeps
+Calls SolarSystem.step() with wall-clock-driven dt, targeting _TARGET_HZ
+iterations per second, and keeps
 latest_snapshot up to date for the render thread to read.
 
 Public interface
@@ -21,7 +22,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from nbodiesgravity.engine.body import BodyState
 from nbodiesgravity.engine.system import SolarSystem
 
-_STEPS_PER_SECOND: int = 120
+_TARGET_HZ: int = 500       # real-time physics rate cap (~500 iterations/s)
+_MAX_SIM_DT: float = 1.0    # max simulated days per sub-step (accuracy cap)
 
 
 class SimulationThread(QThread):
@@ -73,17 +75,36 @@ class SimulationThread(QThread):
 
     def run(self) -> None:
         self._running = True
+        t_prev = time.perf_counter()
         while self._running:
             if self._paused:
                 time.sleep(0.001)
+                t_prev = time.perf_counter()   # reset so resume never produces a huge dt
                 continue
-            dt = self._timescale / _STEPS_PER_SECOND
+
+            t_now = time.perf_counter()
+            real_dt = min(t_now - t_prev, 0.05)   # cap at 50 ms — prevents spiral of death
+            t_prev = t_now
+
+            sim_dt = real_dt * self._timescale
+
             with self._lock:
-                self._system.step(dt)
+                remaining = sim_dt
+                while remaining > 0:
+                    step_dt = min(remaining, _MAX_SIM_DT)
+                    self._system.step(step_dt)
+                    remaining -= step_dt
                 snap = self._system.snapshot()
-            self._elapsed_days += dt          # GIL-safe: single float write, one writer
-            self.latest_snapshot = snap       # atomic reference swap (GIL)
+
+            self._elapsed_days += sim_dt
+            self.latest_snapshot = snap
             self.snapshot_ready.emit(snap)
+
             if any(float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True
                 self.blow_up_detected.emit()
+
+            # Sleep remainder of a 1/_TARGET_HZ real-time slot to yield CPU
+            sleep_for = (1.0 / _TARGET_HZ) - (time.perf_counter() - t_prev)
+            if sleep_for > 0:
+                time.sleep(sleep_for)
