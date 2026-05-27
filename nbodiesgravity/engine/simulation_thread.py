@@ -84,6 +84,6 @@ class SimulationThread(QThread):
             self._elapsed_days += dt          # GIL-safe: single float write, one writer
             self.latest_snapshot = snap       # atomic reference swap (GIL)
             self.snapshot_ready.emit(snap)
-            if any(float(np.linalg.norm(s.pos)) > 1000.0 for s in snap):
+            if any(float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True
                 self.blow_up_detected.emit()
