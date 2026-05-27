@@ -1,0 +1,16 @@
+name: nbodiesgravity
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy>=1.24
+  - matplotlib>=3.7
+  - pip
+  - pip:
+    - PyQt6>=6.5
+    - PyOpenGL>=3.1
+    - PyOpenGL-accelerate>=3.1
+    - requests>=2.31
+    - responses>=0.23
+    - pytest>=7.4
