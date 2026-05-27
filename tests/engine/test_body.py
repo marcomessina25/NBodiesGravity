@@ -39,3 +39,25 @@ def test_celestial_body_show_trail_default():
         radius=100.0, color=(1.0, 1.0, 1.0),
     )
     assert body.show_trail is True
+
+
+def test_celestial_body_active_default():
+    body = CelestialBody(
+        name="Test", mass=1e20, pos=np.zeros(3), vel=np.zeros(3),
+        radius=100.0, color=(1.0, 1.0, 1.0),
+    )
+    assert body.active is True
+
+
+def test_snapshot_carries_active_flag():
+    body = CelestialBody(
+        name="Test", mass=1e20, pos=np.zeros(3), vel=np.zeros(3),
+        radius=100.0, color=(1.0, 1.0, 1.0),
+    )
+    body.active = False
+    snap = body.snapshot()
+    assert snap.active is False
+
+    body.active = True
+    snap2 = body.snapshot()
+    assert snap2.active is True

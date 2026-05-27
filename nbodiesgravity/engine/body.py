@@ -13,6 +13,7 @@ class BodyState(NamedTuple):
     name: str
     pos: np.ndarray   # AU, shape (3,)
     vel: np.ndarray   # AU/day, shape (3,)
+    active: bool = True   # False = excluded from integrator, invisible in render
 
 
 @dataclass
@@ -29,7 +30,13 @@ class CelestialBody:
     radius: float                       # km — for rendering only
     color: tuple[float, float, float]   # RGB 0–1
     show_trail: bool = True
+    active: bool = True                 # False = excluded from integrator
 
     def snapshot(self) -> BodyState:
         """Return a thread-safe copy of kinematic state."""
-        return BodyState(name=self.name, pos=self.pos.copy(), vel=self.vel.copy())
+        return BodyState(
+            name=self.name,
+            pos=self.pos.copy(),
+            vel=self.vel.copy(),
+            active=self.active,
+        )
