@@ -9,6 +9,9 @@ class SolarSystem:
 
     add_body / remove_body must only be called while the SimulationThread
     is paused — they are not thread-safe.
+
+    body.active may be toggled from the UI thread at any time; it is read
+    once per tick inside step() and any change takes effect within one tick.
     """
 
     def __init__(self, bodies: list[CelestialBody]) -> None:
