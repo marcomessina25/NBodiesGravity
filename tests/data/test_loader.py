@@ -22,6 +22,15 @@ def test_load_default_contains_haumea_and_makemake():
     assert "Makemake" in names
 
 
+def test_haumea_and_makemake_are_in_outer_system():
+    system = load_default_system()
+    for name in ("Haumea", "Makemake"):
+        body = system.get_body(name)
+        assert body is not None
+        dist = np.linalg.norm(body.pos)
+        assert 35.0 < dist < 60.0, f"{name} distance {dist:.1f} AU unexpected"
+
+
 def test_load_default_contains_sun_earth_moon():
     system = load_default_system()
     names = {b.name for b in system.bodies}
