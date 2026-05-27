@@ -31,27 +31,27 @@ class BodyListPanel(QWidget):
         # Bodies bulk-action row
         layout.addWidget(QLabel("Bodies"))
         body_btns = QHBoxLayout()
-        btn_bodies_on  = QPushButton("Enable All")
-        btn_bodies_off = QPushButton("Disable All")
-        btn_bodies_on.setFixedHeight(22)
-        btn_bodies_off.setFixedHeight(22)
-        btn_bodies_on.clicked.connect(lambda: self.all_bodies_set.emit(True))
-        btn_bodies_off.clicked.connect(lambda: self.all_bodies_set.emit(False))
-        body_btns.addWidget(btn_bodies_on)
-        body_btns.addWidget(btn_bodies_off)
+        self._btn_bodies_on  = QPushButton("Enable All")
+        self._btn_bodies_off = QPushButton("Disable All")
+        self._btn_bodies_on.setFixedHeight(22)
+        self._btn_bodies_off.setFixedHeight(22)
+        self._btn_bodies_on.clicked.connect(lambda: self.all_bodies_set.emit(True))
+        self._btn_bodies_off.clicked.connect(lambda: self.all_bodies_set.emit(False))
+        body_btns.addWidget(self._btn_bodies_on)
+        body_btns.addWidget(self._btn_bodies_off)
         layout.addLayout(body_btns)
 
         # Trails bulk-action row
         layout.addWidget(QLabel("Trails"))
         trail_btns = QHBoxLayout()
-        btn_trails_on  = QPushButton("Enable All")
-        btn_trails_off = QPushButton("Disable All")
-        btn_trails_on.setFixedHeight(22)
-        btn_trails_off.setFixedHeight(22)
-        btn_trails_on.clicked.connect(lambda: self.all_trails_set.emit(True))
-        btn_trails_off.clicked.connect(lambda: self.all_trails_set.emit(False))
-        trail_btns.addWidget(btn_trails_on)
-        trail_btns.addWidget(btn_trails_off)
+        self._btn_trails_on  = QPushButton("Enable All")
+        self._btn_trails_off = QPushButton("Disable All")
+        self._btn_trails_on.setFixedHeight(22)
+        self._btn_trails_off.setFixedHeight(22)
+        self._btn_trails_on.clicked.connect(lambda: self.all_trails_set.emit(True))
+        self._btn_trails_off.clicked.connect(lambda: self.all_trails_set.emit(False))
+        trail_btns.addWidget(self._btn_trails_on)
+        trail_btns.addWidget(self._btn_trails_off)
         layout.addLayout(trail_btns)
 
         self._list = QListWidget()
@@ -94,18 +94,18 @@ class BodyListPanel(QWidget):
         cb_active = QCheckBox("Active")
         cb_active.setChecked(body.active)
         name = body.name
-        cb_active.stateChanged.connect(
+        cb_active.checkStateChanged.connect(
             lambda state, n=name: self.body_active_toggled.emit(
-                n, state == Qt.CheckState.Checked.value
+                n, state == Qt.CheckState.Checked
             )
         )
         layout.addWidget(cb_active)
         # Trail checkbox
         cb_trail = QCheckBox("Trail")
         cb_trail.setChecked(body.show_trail)
-        cb_trail.stateChanged.connect(
+        cb_trail.checkStateChanged.connect(
             lambda state, n=name: self.trail_toggled.emit(
-                n, state == Qt.CheckState.Checked.value
+                n, state == Qt.CheckState.Checked
             )
         )
         layout.addWidget(cb_trail)
