@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
                 # so the camera does not freeze at the deactivated body's position.
                 if self._gl.camera.center_name == name:
                     self._gl.camera.set_center("Sun")
+                    self._ctrl.set_center_name("Sun")
                     self._gl.clear_trails()
 
     def _on_all_bodies_set(self, active: bool) -> None:
@@ -262,6 +263,7 @@ class MainWindow(QMainWindow):
             # not freeze at the last position of whatever body was followed.
             if self._gl.camera.center_name != "Sun":
                 self._gl.camera.set_center("Sun")
+                self._ctrl.set_center_name("Sun")
         self._body_list.populate(self._sim.system.bodies)
 
     def _on_all_trails_set(self, enabled: bool) -> None:

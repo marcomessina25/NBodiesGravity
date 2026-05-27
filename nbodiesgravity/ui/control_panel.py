@@ -101,6 +101,18 @@ class ControlPanel(QWidget):
         """Update the live simulation date label. Call with a 'YYYY-MM-DD' string."""
         self._sim_date_label.setText(f"→  {text}")
 
+    def set_center_name(self, name: str) -> None:
+        """Programmatically select a body in the center combo without emitting center_changed.
+
+        Use when code resets the camera center without user interaction (e.g., when
+        a followed body is deactivated).  No-op if the name is not in the combo.
+        """
+        self._center_combo.blockSignals(True)
+        idx = self._center_combo.findText(name)
+        if idx >= 0:
+            self._center_combo.setCurrentIndex(idx)
+        self._center_combo.blockSignals(False)
+
     # Private slots
     def _on_date_committed(self) -> None:
         qd = self._date_edit.date()
