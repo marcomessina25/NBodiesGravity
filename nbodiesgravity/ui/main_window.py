@@ -74,6 +74,9 @@ class MainWindow(QMainWindow):
         self._body_list.body_selected.connect(self._gl.camera.set_center)
         self._body_list.body_edit_requested.connect(self._edit_body)
         self._body_list.trail_toggled.connect(self._on_trail_toggled)
+        self._body_list.body_active_toggled.connect(self._on_body_active_toggled)
+        self._body_list.all_bodies_set.connect(self._on_all_bodies_set)
+        self._body_list.all_trails_set.connect(self._on_all_trails_set)
         self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
         self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
@@ -135,7 +138,7 @@ class MainWindow(QMainWindow):
             self._ctrl.set_playing(False)
         self._last_epoch = dt
         self._progress = QProgressDialog(
-            "Fetching from JPL Horizons…", "Cancel", 0, 20, self
+            "Fetching from JPL Horizons…", "Cancel", 0, 22, self
         )
         self._progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress.setMinimumDuration(0)   # show immediately, don't wait 4s
@@ -234,6 +237,38 @@ class MainWindow(QMainWindow):
             if body:
                 body.show_trail = enabled
 
+    def _on_body_active_toggled(self, name: str, active: bool) -> None:
+        if self._sim is None:
+            return
+        body = self._sim.system.get_body(name)
+        if body:
+            body.active = active
+            if not active:
+                self._gl.clear_trail_for(name)
+                # If the camera is following this body, reset center to Sun
+                # so the camera does not freeze at the deactivated body's position.
+                if self._gl.camera.center_name == name:
+                    self._gl.camera.set_center("Sun")
+                    self._gl.clear_trails()
+
+    def _on_all_bodies_set(self, active: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            body.active = active
+        if not active:
+            self._gl.clear_trails()
+            # Reset camera center to Sun if the current center is being deactivated
+            self._gl.camera.set_center("Sun")
+        self._body_list.populate(self._sim.system.bodies)
+
+    def _on_all_trails_set(self, enabled: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            body.show_trail = enabled
+        self._body_list.populate(self._sim.system.bodies)
+
     def _refresh_after_body_change(self) -> None:
         if self._sim is None:
             return
@@ -259,9 +294,7 @@ class MainWindow(QMainWindow):
             return
         bodies = self._sim.system.bodies
         new_state = not all(b.show_trail for b in bodies)
-        for b in bodies:
-            b.show_trail = new_state
-        self._body_list.populate(bodies)
+        self._on_all_trails_set(new_state)
 
     # ----------------------------------------------------------------
     # File menu
