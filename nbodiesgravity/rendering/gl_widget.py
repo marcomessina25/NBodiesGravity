@@ -107,7 +107,11 @@ class GLWidget(QOpenGLWidget):
             tb.reset()
 
     def clear_trail_for(self, name: str) -> None:
-        """Reset the trail ring-buffer for a single named body."""
+        """Reset the trail ring-buffer for a single named body.
+
+        Call when a body is deactivated so stale trail segments do not
+        persist across an active/inactive transition.
+        """
         tb = self._trail_buffers.get(name)
         if tb is not None:
             tb.reset()
