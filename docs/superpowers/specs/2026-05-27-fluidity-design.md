@@ -79,7 +79,7 @@ def run(self) -> None:
 
 **Invariants preserved:**
 - `set_timescale`, `pause`, `resume`, `reset`, `stop_thread`, `elapsed_days` — all unchanged.
-- `_elapsed_days` now tracks actual simulated time accurately (was over-counted before).
+- `_elapsed_days` now accrues at exactly `timescale` days per real second (previously it accrued faster because the loop ran faster than real time).
 - GIL-safe `latest_snapshot` reference swap — unchanged.
 - Lock usage — unchanged.
 
