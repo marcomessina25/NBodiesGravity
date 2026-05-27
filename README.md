@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, or build your own planetary system from scratch.
 
-![Python](https://img.shields.io/badge/Python-3.11-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -19,7 +19,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 ### Solar System data
 
 - **Bundled J2000 snapshot** (2000-01-01) — starts instantly with no network connection required
-- **10 bodies included**: Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune
+- **20 bodies included**: all 8 planets + Sun; Earth's Moon; the four Galilean moons of Jupiter (Io, Europa, Ganymede, Callisto); Saturn's Titan; Neptune's Triton; dwarf planets Pluto (+ Charon), Eris, and Ceres
 - **JPL Horizons integration**: fetch real NASA state vectors for any date via the REST API
 - **Local JSON cache** for Horizons results — repeated fetches for the same date are instant
 
@@ -130,7 +130,7 @@ The test suite contains 37 tests covering the integrator, body datatypes, JPL Ho
 | 3D rendering | PyOpenGL (OpenGL 3.3 Core) |
 | Numerics | NumPy |
 | Horizons HTTP client | Requests |
-| Language | Python 3.11 |
+| Language | Python 3.12 |
 | Package manager | Conda (`nbodiesgravity` environment) |
 
 ---
@@ -177,7 +177,10 @@ environment.yml
 Select **Earth** as the center body and zoom in to roughly **0.1 AU**. The Moon will appear as a distinct body tracing its orbit around Earth.
 
 **Observing Jovian moons**
-Select **Jupiter** as the center body and zoom in to roughly **0.5 AU**. Io, Europa, and Ganymede will separate from Jupiter's disc.
+Select **Jupiter** as the center body and zoom in to roughly **0.5 AU**. Io, Europa, Ganymede, and Callisto will separate from Jupiter's disc. Because the inner Galilean moons orbit Jupiter in just 2–7 days, you need a **slow timescale** (1–7 days/s or less) to watch them trace individual orbits without the motion blurring into a continuous ring of trail. At higher speeds the moons are there, but each orbit completes in a fraction of a second.
+
+**Observing Saturn's moons**
+Select **Saturn** as the center body and zoom in to roughly **0.5 AU**. Titan is the most prominent. As with the Jovian system, keep the timescale slow (a few days/s) so Titan's 16-day orbit is visible as a distinct arc rather than a full closed trail rendered instantly.
 
 **Understanding trails**
 Trails are reference-frame relative — they show the trajectory as seen from the current center body. Whenever you change the center body, all trails are cleared because the previous frame's data is incompatible with the new reference frame.
