@@ -1,0 +1,35 @@
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import NamedTuple
+import numpy as np
+
+
+class BodyState(NamedTuple):
+    """Thread-safe snapshot of a body's kinematic state.
+
+    Use NamedTuple so the object is immutable at the Python level.
+    Array *contents* can still be mutated, so snapshot() copies them.
+    """
+    name: str
+    pos: np.ndarray   # AU, shape (3,)
+    vel: np.ndarray   # AU/day, shape (3,)
+
+
+@dataclass
+class CelestialBody:
+    """A gravitationally interacting body.
+
+    Positions and velocities are always stored in the Solar System
+    Barycenter (SSB) frame, in units of AU and AU/day.
+    """
+    name: str
+    mass: float                         # kg
+    pos: np.ndarray                     # AU, shape (3,)
+    vel: np.ndarray                     # AU/day, shape (3,)
+    radius: float                       # km — for rendering only
+    color: tuple[float, float, float]   # RGB 0–1
+    show_trail: bool = True
+
+    def snapshot(self) -> BodyState:
+        """Return a thread-safe copy of kinematic state."""
+        return BodyState(name=self.name, pos=self.pos.copy(), vel=self.vel.copy())
