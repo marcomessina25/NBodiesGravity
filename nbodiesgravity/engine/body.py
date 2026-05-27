@@ -30,7 +30,7 @@ class CelestialBody:
     radius: float                       # km — for rendering only
     color: tuple[float, float, float]   # RGB 0–1
     show_trail: bool = True
-    active: bool = True                 # False = excluded from integrator
+    active: bool = True                 # False = excluded from integrator, invisible in render
 
     def snapshot(self) -> BodyState:
         """Return a thread-safe copy of kinematic state."""

@@ -61,3 +61,8 @@ def test_snapshot_carries_active_flag():
     body.active = True
     snap2 = body.snapshot()
     assert snap2.active is True
+
+
+def test_body_state_active_defaults_to_true():
+    state = BodyState(name="X", pos=np.zeros(3), vel=np.zeros(3))
+    assert state.active is True
