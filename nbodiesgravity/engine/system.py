@@ -21,14 +21,19 @@ class SolarSystem:
         return list(self._bodies)
 
     def step(self, dt: float) -> None:
-        """Advance all bodies by dt days using Velocity Verlet."""
-        if not self._bodies:
+        """Advance all *active* bodies by dt days using Velocity Verlet.
+
+        Inactive bodies (body.active is False) are skipped entirely —
+        their pos/vel remain frozen at their last integrated values.
+        """
+        active = [b for b in self._bodies if b.active]
+        if not active:
             return
-        positions = np.array([b.pos for b in self._bodies])
-        velocities = np.array([b.vel for b in self._bodies])
-        masses = np.array([b.mass for b in self._bodies])
+        positions  = np.array([b.pos for b in active])
+        velocities = np.array([b.vel for b in active])
+        masses     = np.array([b.mass for b in active])
         new_pos, new_vel = self._integrator.step(positions, velocities, masses, dt)
-        for i, body in enumerate(self._bodies):
+        for i, body in enumerate(active):
             body.pos = new_pos[i]
             body.vel = new_vel[i]
 

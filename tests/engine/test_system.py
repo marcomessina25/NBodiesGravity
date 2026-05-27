@@ -62,3 +62,50 @@ def test_get_body_found_and_not_found():
 def test_empty_system_step_does_not_raise():
     system = SolarSystem([])
     system.step(1.0)  # must not raise
+
+
+def test_inactive_body_not_integrated():
+    sun = _sun()
+    earth = _earth()
+    earth.active = False
+    frozen_pos = earth.pos.copy()   # save BEFORE step
+
+    system = SolarSystem([sun, earth])
+    system.step(1.0)
+
+    # Earth is inactive — its position must not change at all
+    assert np.allclose(system.bodies[1].pos, frozen_pos)
+
+
+def test_all_inactive_step_is_noop():
+    sun = _sun()
+    earth = _earth()
+    sun.active = False
+    earth.active = False
+    frozen_sun   = sun.pos.copy()
+    frozen_earth = earth.pos.copy()
+
+    system = SolarSystem([sun, earth])
+    system.step(1.0)   # must not raise
+
+    assert np.allclose(system.bodies[0].pos, frozen_sun)
+    assert np.allclose(system.bodies[1].pos, frozen_earth)
+
+
+def test_reactivate_body_resumes_integration():
+    sun = _sun()
+    earth = _earth()
+    earth.active = False
+
+    system = SolarSystem([sun, earth])
+    for _ in range(5):
+        system.step(1.0)
+
+    frozen_pos = system.bodies[1].pos.copy()   # save BEFORE reactivation
+
+    # Reactivate — Sun is still at near-origin, Earth at ~1 AU.
+    # Gravity from Sun will pull Earth; one step is sufficient to detect movement.
+    system.bodies[1].active = True
+    system.step(1.0)
+
+    assert not np.allclose(system.bodies[1].pos, frozen_pos)
