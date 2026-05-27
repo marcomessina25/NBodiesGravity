@@ -106,6 +106,12 @@ class GLWidget(QOpenGLWidget):
         for tb in self._trail_buffers.values():
             tb.reset()
 
+    def clear_trail_for(self, name: str) -> None:
+        """Reset the trail ring-buffer for a single named body."""
+        tb = self._trail_buffers.get(name)
+        if tb is not None:
+            tb.reset()
+
     # ---------------------------------------------------------------
     # QOpenGLWidget callbacks
     # ---------------------------------------------------------------
@@ -153,6 +159,8 @@ class GLWidget(QOpenGLWidget):
 
         # Accumulate trail positions (relative to current center)
         for state in snap:
+            if not state.active:
+                continue
             self._trail_buffers[state.name].append(state.pos, offset)
 
         # --- Trails ---
@@ -165,6 +173,8 @@ class GLWidget(QOpenGLWidget):
         glUniform3f(glGetUniformLocation(self._line_prog, "uCenterOffset"), 0.0, 0.0, 0.0)
         glUniform1f(glGetUniformLocation(self._line_prog, "uAlpha"), 0.55)
         for state in snap:
+            if not state.active:
+                continue
             body = (self._simulation_thread.system.get_body(state.name)
                     if self._simulation_thread else None)
             if body and not body.show_trail:
@@ -185,6 +195,8 @@ class GLWidget(QOpenGLWidget):
             *(sun.pos - offset).astype(np.float32),
         )
         for state in snap:
+            if not state.active:
+                continue
             info = self._display_info.get(state.name)
             # Physical log-scaled base, floored to 0.8 % of camera distance so
             # bodies stay visible when zoomed out to the full solar-system view.
