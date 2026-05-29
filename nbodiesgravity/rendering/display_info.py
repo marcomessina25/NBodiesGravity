@@ -31,4 +31,4 @@ class BodyDisplayInfo:
         """
         log_r = math.log10(max(self.radius_km, 1.0))
         t = max(0.0, min(1.0, (log_r - 2.0) / (6.0 - 2.0)))
-        return 0.0003 + t * (0.003 - 0.0003)
+        return 0.0001 + t * (0.001 - 0.0001)
