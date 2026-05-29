@@ -30,9 +30,9 @@ class Camera:
         self.panning_offset = np.zeros(3, dtype=np.float32)
 
     def set_top_view(self) -> None:
-        """Orient the camera directly above the target (looking down the Y axis)."""
+        """Orient the camera directly above the target (looking down the Z axis)."""
         self.azimuth = 0.0
-        self.elevation = np.pi / 2 - 0.01
+        self.elevation = 0.0
         self.panning_offset = np.zeros(3, dtype=np.float32)
 
     def update_center_pos(self, snapshot: list[BodyState]) -> None:

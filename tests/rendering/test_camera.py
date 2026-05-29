@@ -63,6 +63,6 @@ def test_camera_set_top_view():
     cam.set_top_view()
     
     assert np.allclose(cam.azimuth, 0.0)
-    assert np.allclose(cam.elevation, np.pi / 2 - 0.01)
+    assert np.allclose(cam.elevation, 0.0)
     assert np.allclose(cam.distance, 15.0)  # should preserve distance
     assert np.allclose(cam.panning_offset, 0.0)  # should reset panning offset
