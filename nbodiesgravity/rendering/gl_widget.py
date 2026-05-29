@@ -240,7 +240,9 @@ class GLWidget(QOpenGLWidget):
             # bodies stay visible when zoomed out to the full solar-system view.
             phys_r = info.display_radius if info else 0.002
             r = max(phys_r, self.camera.distance * 0.002)
-            if state.name in {"Moon", "Io", "Europa", "Ganymede", "Callisto", "Titan", "Triton"}:
+            body = (self._simulation_thread.system.get_body(state.name)
+                    if self._simulation_thread else None)
+            if body and body.label == "moon" and state.name != "Charon":
                 r /= 10.0
             pos_rel = (state.pos - offset).astype(np.float32)
             model = _model_matrix(pos_rel, r)
@@ -280,6 +282,11 @@ class GLWidget(QOpenGLWidget):
             if not state.active:
                 continue
                 
+            body = (self._simulation_thread.system.get_body(state.name)
+                    if self._simulation_thread else None)
+            if body and not body.show_name:
+                continue
+
             info = self._display_info.get(state.name)
             pos_rel = state.pos - offset
             
@@ -292,7 +299,7 @@ class GLWidget(QOpenGLWidget):
             # Determine spacing offset based on dynamic sphere size on screen
             phys_r = info.display_radius if info else 0.002
             r = max(phys_r, self.camera.distance * 0.002)
-            if state.name in {"Moon", "Io", "Europa", "Ganymede", "Callisto", "Titan", "Triton"}:
+            if body and body.label == "moon" and state.name != "Charon":
                 r /= 10.0
             
             # Approximate screen-space radius using projection geometry

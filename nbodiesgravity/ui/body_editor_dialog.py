@@ -45,6 +45,7 @@ class BodyEditorDialog(QDialog):
             vel=np.array([self._vx.value(), self._vy.value(), self._vz.value()]),
             radius=self._radius_spin.value(),
             color=self._color,
+            label=self._label_combo.currentText(),
         )
 
     def _build_ui(self, body: CelestialBody | None) -> None:
@@ -54,6 +55,12 @@ class BodyEditorDialog(QDialog):
         self._name_edit = QLineEdit(body.name if body else "")
         self._name_edit.textChanged.connect(self._validate)
         form.addRow("Name:", self._name_edit)
+
+        # Label row
+        self._label_combo = QComboBox()
+        self._label_combo.addItems(["star", "planet", "moon", "dwarf planet", "asteroid"])
+        self._label_combo.setCurrentText(body.label if body else "planet")
+        form.addRow("Label:", self._label_combo)
 
         # Mass rows
         self._mass_spin = _sci_spin(1e-3, 2e30, body.mass if body else 1e22)

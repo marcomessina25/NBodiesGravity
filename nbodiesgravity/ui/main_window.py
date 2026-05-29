@@ -84,6 +84,10 @@ class MainWindow(QMainWindow):
         self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
         self._ctrl.restart_requested.connect(self._on_restart)
         self._ctrl.top_view_requested.connect(self._on_top_view)
+        
+        self._body_list.category_active_toggled.connect(self._on_category_active_toggled)
+        self._body_list.category_trail_toggled.connect(self._on_category_trail_toggled)
+        self._body_list.category_name_toggled.connect(self._on_category_name_toggled)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -164,8 +168,9 @@ class MainWindow(QMainWindow):
             self._sim.pause()
             self._ctrl.set_playing(False)
         self._last_epoch = dt
+        num_bodies = len(self._sim.system.bodies) if self._sim else 39
         self._progress = QProgressDialog(
-            "Fetching from JPL Horizons…", "Cancel", 0, 22, self
+            "Fetching from JPL Horizons…", "Cancel", 0, num_bodies, self
         )
         self._progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress.setMinimumDuration(0)   # show immediately, don't wait 4s
@@ -249,6 +254,7 @@ class MainWindow(QMainWindow):
             body.vel = updated.vel
             body.radius = updated.radius
             body.color = updated.color
+            body.label = updated.label
             self._refresh_after_body_change()
         if was_playing:
             self._sim.resume()
@@ -315,6 +321,45 @@ class MainWindow(QMainWindow):
         for body in self._sim.system.bodies:
             body.show_trail = enabled
         self._body_list.populate(self._sim.system.bodies)
+
+    def _on_category_active_toggled(self, label: str, active: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.active = active
+                if not active:
+                    self._gl.clear_trail_for(body.name)
+        if not active and self._gl.camera.center_name:
+            followed = self._sim.system.get_body(self._gl.camera.center_name)
+            if followed and not followed.active:
+                fallback = next(
+                    (b.name for b in self._sim.system.bodies if b.active),
+                    self._gl.camera.center_name
+                )
+                self._gl.camera.set_center(fallback)
+                self._ctrl.set_center_name(fallback)
+                self._gl.clear_trails()
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
+
+    def _on_category_trail_toggled(self, label: str, enabled: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.show_trail = enabled
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
+
+    def _on_category_name_toggled(self, label: str, enabled: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.show_name = enabled
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
 
     def _refresh_after_body_change(self) -> None:
         if self._sim is None:
