@@ -320,6 +320,8 @@ class MainWindow(QMainWindow):
             for b in bodies
         ]
         self._gl.set_display_info(display_infos)
+        self._sim.refresh_snapshot()
+        self._gl.update()
 
     # ----------------------------------------------------------------
     # View menu

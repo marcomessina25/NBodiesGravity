@@ -95,6 +95,9 @@ class GLWidget(QOpenGLWidget):
     def set_display_info(self, infos: list[BodyDisplayInfo]) -> None:
         """Register rendering metadata. Call after every system load/reset."""
         self._display_info = {info.name: info for info in infos}
+        # Keep only trail buffers of active display bodies to avoid stale memory
+        active_names = {info.name for info in infos}
+        self._trail_buffers = {name: tb for name, tb in self._trail_buffers.items() if name in active_names}
         for info in infos:
             if info.name not in self._trail_buffers:
                 # GPU initialization is deferred to paintGL where the GL

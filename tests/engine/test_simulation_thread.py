@@ -41,3 +41,23 @@ def test_elapsed_days_tracks_real_time(qapp):
         f"elapsed_days={thread.elapsed_days:.4f} — loop is not real-time-bounded"
     )
 
+
+def test_refresh_snapshot_updates_latest_snapshot(qapp):
+    """Verify that calling refresh_snapshot() instantly updates the thread's latest_snapshot."""
+    sys = _one_body_system()
+    thread = SimulationThread(sys)
+    assert len(thread.latest_snapshot) == 1
+    assert thread.latest_snapshot[0].name == "Earth"
+
+    # Add a new body to system while paused
+    new_body = CelestialBody("Mars", 6e23, np.array([1.5, 0.0, 0.0]), np.zeros(3), 1.0, (1.0, 0.0, 0.0))
+    sys.add_body(new_body)
+
+    # Prior to refresh, snapshot should still be old
+    assert len(thread.latest_snapshot) == 1
+
+    # Force refresh
+    thread.refresh_snapshot()
+    assert len(thread.latest_snapshot) == 2
+    assert thread.latest_snapshot[1].name == "Mars"
+
