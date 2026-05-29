@@ -44,3 +44,21 @@ def test_ring_buffer_wraps_and_count_caps_at_max():
         tb.append(np.array([float(i), 0.0, 0.0]), center)
     assert tb._count == MAX_TRAIL_POINTS
     assert tb._head == 3
+
+
+def test_reset_only_affects_target_buffer():
+    """Resetting one TrailBuffer must not disturb another.
+
+    This validates the isolation behaviour that GLWidget.clear_trail_for()
+    relies on — it calls tb.reset() on exactly one buffer.
+    """
+    tb1 = TrailBuffer((1.0, 0.0, 0.0))
+    tb2 = TrailBuffer((0.0, 1.0, 0.0))
+    tb1.append(np.array([1.0, 2.0, 3.0]), np.zeros(3))
+    tb2.append(np.array([4.0, 5.0, 6.0]), np.zeros(3))
+
+    tb1.reset()
+
+    assert tb1._count == 0
+    assert tb2._count == 1   # tb2 must be unaffected
+    assert np.allclose(tb2._buf[0], [4.0, 5.0, 6.0])

@@ -24,3 +24,20 @@ def test_elapsed_days_property_reflects_internal_state(qapp):
     thread = SimulationThread(_one_body_system())
     thread._elapsed_days = 42.5
     assert thread.elapsed_days == 42.5
+
+
+def test_elapsed_days_tracks_real_time(qapp):
+    """Simulation must advance at ~timescale days per real second, not faster."""
+    import time as _time
+    thread = SimulationThread(_one_body_system())
+    thread.set_timescale(1.0)   # 1 simulated day per real second
+    thread.resume()
+    thread.start()
+    _time.sleep(0.15)           # run for ~150 ms
+    thread.pause()
+    thread.stop_thread()
+    # Expected: ~0.15 days. Generous bounds accommodate CI scheduling jitter.
+    assert 0.03 <= thread.elapsed_days <= 0.35, (
+        f"elapsed_days={thread.elapsed_days:.4f} — loop is not real-time-bounded"
+    )
+

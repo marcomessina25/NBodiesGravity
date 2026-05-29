@@ -10,9 +10,25 @@ def test_load_default_returns_solar_system():
     assert isinstance(system, SolarSystem)
 
 
-def test_load_default_has_20_bodies():
+def test_load_default_has_22_bodies():
     system = load_default_system()
-    assert len(system.bodies) == 20
+    assert len(system.bodies) == 22
+
+
+def test_load_default_contains_haumea_and_makemake():
+    system = load_default_system()
+    names = {b.name for b in system.bodies}
+    assert "Haumea" in names
+    assert "Makemake" in names
+
+
+def test_haumea_and_makemake_are_in_outer_system():
+    system = load_default_system()
+    for name in ("Haumea", "Makemake"):
+        body = system.get_body(name)
+        assert body is not None
+        dist = np.linalg.norm(body.pos)
+        assert 35.0 < dist < 60.0, f"{name} distance {dist:.1f} AU unexpected"
 
 
 def test_load_default_contains_sun_earth_moon():
