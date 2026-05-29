@@ -31,6 +31,8 @@ class CelestialBody:
     color: tuple[float, float, float]   # RGB 0–1
     show_trail: bool = True
     active: bool = True                 # False = excluded from integrator, invisible in render
+    label: str = "planet"               # star, planet, moon, dwarf planet, asteroid
+    show_name: bool = True
 
     def snapshot(self) -> BodyState:
         """Return a thread-safe copy of kinematic state."""

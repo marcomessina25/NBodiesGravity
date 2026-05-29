@@ -69,6 +69,11 @@ class SimulationThread(QThread):
             self.latest_snapshot = system.snapshot()
         self._elapsed_days = 0.0   # reset date counter to match the new epoch
 
+    def refresh_snapshot(self) -> None:
+        """Force a snapshot refresh from the current system state. Safe to call while paused."""
+        with self._lock:
+            self.latest_snapshot = self._system.snapshot()
+
     def stop_thread(self) -> None:
         self._running = False
         self.wait()

@@ -10,9 +10,9 @@ def test_load_default_returns_solar_system():
     assert isinstance(system, SolarSystem)
 
 
-def test_load_default_has_22_bodies():
+def test_load_default_has_39_bodies():
     system = load_default_system()
-    assert len(system.bodies) == 22
+    assert len(system.bodies) == 39
 
 
 def test_load_default_contains_haumea_and_makemake():

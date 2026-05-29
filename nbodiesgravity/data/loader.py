@@ -40,6 +40,8 @@ def _body_from_entry(
         vel=np.array(vel_au_per_day, dtype=float),
         radius=entry["radius_km"],
         color=tuple(entry["color"]),
+        label=entry.get("label", "planet"),
+        show_name=entry.get("show_name", True),
     )
 
 
