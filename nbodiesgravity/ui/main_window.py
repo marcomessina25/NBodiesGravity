@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
         self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
         self._ctrl.restart_requested.connect(self._on_restart)
+        self._ctrl.top_view_requested.connect(self._on_top_view)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -100,6 +101,7 @@ class MainWindow(QMainWindow):
 
         vm = mb.addMenu("&View")
         vm.addAction("Reset Camera",     self._reset_camera)
+        vm.addAction("Top View",         self._on_top_view)
         vm.addAction("Toggle All Trails",self._toggle_all_trails)
         self._action_show_names = vm.addAction("Show Body Names")
         self._action_show_names.setCheckable(True)
@@ -335,6 +337,12 @@ class MainWindow(QMainWindow):
     def _reset_camera(self) -> None:
         cam = self._gl.camera
         cam.azimuth, cam.elevation, cam.distance = 0.3, 0.5, 6.0
+        cam.panning_offset = np.zeros(3, dtype=np.float32)
+        self._gl.update()
+
+    def _on_top_view(self) -> None:
+        self._gl.camera.set_top_view()
+        self._gl.update()
 
     def _toggle_all_trails(self) -> None:
         if self._sim is None:

@@ -25,6 +25,7 @@ class ControlPanel(QWidget):
     clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
     show_names_toggled = pyqtSignal(bool)     # True = show names
     restart_requested = pyqtSignal()          # user clicked "Restart"
+    top_view_requested = pyqtSignal()         # user clicked "Top View"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -83,6 +84,11 @@ class ControlPanel(QWidget):
         )
         self._center_combo.currentTextChanged.connect(self.center_changed)
         layout.addWidget(self._center_combo)
+
+        layout.addSpacing(8)
+        self._top_view_btn = QPushButton("Top View")
+        self._top_view_btn.clicked.connect(self.top_view_requested)
+        layout.addWidget(self._top_view_btn)
 
         layout.addSpacing(8)
         self._clear_trails_btn = QPushButton("Clear Trails")

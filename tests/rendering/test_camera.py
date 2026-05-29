@@ -51,3 +51,18 @@ def test_camera_focus_on_body():
     expected_offset = np.array([4.0, 5.0, 6.0], dtype=np.float32)
     assert np.allclose(cam.panning_offset, expected_offset)
     assert cam.center_name == "Sun"  # should not change the reference system center
+
+
+def test_camera_set_top_view():
+    cam = Camera()
+    cam.azimuth = 0.5
+    cam.elevation = 0.2
+    cam.distance = 15.0
+    cam.panning_offset = np.array([3.0, 4.0, 5.0], dtype=np.float32)
+    
+    cam.set_top_view()
+    
+    assert np.allclose(cam.azimuth, 0.0)
+    assert np.allclose(cam.elevation, np.pi / 2 - 0.01)
+    assert np.allclose(cam.distance, 15.0)  # should preserve distance
+    assert np.allclose(cam.panning_offset, 0.0)  # should reset panning offset
