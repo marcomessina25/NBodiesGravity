@@ -171,9 +171,10 @@ class MainWindow(QMainWindow):
         self._loader.start()
 
     def _on_body_loaded(self, name: str) -> None:
-        if self._progress:
-            self._progress.setValue(self._progress.value() + 1)
-            self._progress.setLabelText(f"Loaded {name}…")
+        prog = self._progress
+        if prog is not None:
+            prog.setLabelText(f"Loaded {name}…")
+            prog.setValue(prog.value() + 1)
 
     def _on_load_finished(self, system: SolarSystem) -> None:
         if self._progress:
