@@ -5,7 +5,7 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QDateEdit, QComboBox,
-    QPushButton, QSlider, QSizePolicy,
+    QPushButton, QSlider, QSizePolicy, QCheckBox,
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 
@@ -23,6 +23,9 @@ class ControlPanel(QWidget):
     center_changed = pyqtSignal(str)          # new center body name
     play_toggled = pyqtSignal(bool)           # True = playing
     clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
+    show_names_toggled = pyqtSignal(bool)     # True = show names
+    restart_requested = pyqtSignal()          # user clicked "Restart"
+    top_view_requested = pyqtSignal()         # user clicked "Top View"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -51,6 +54,11 @@ class ControlPanel(QWidget):
         self._play_btn.clicked.connect(self._on_play_clicked)
         layout.addWidget(self._play_btn)
 
+        self._restart_btn = QPushButton("↺  Restart")
+        self._restart_btn.setFixedWidth(90)
+        self._restart_btn.clicked.connect(self.restart_requested)
+        layout.addWidget(self._restart_btn)
+
         layout.addSpacing(12)
 
         layout.addWidget(QLabel("Speed:"))
@@ -78,9 +86,20 @@ class ControlPanel(QWidget):
         layout.addWidget(self._center_combo)
 
         layout.addSpacing(8)
+        self._top_view_btn = QPushButton("Top View")
+        self._top_view_btn.clicked.connect(self.top_view_requested)
+        layout.addWidget(self._top_view_btn)
+
+        layout.addSpacing(8)
         self._clear_trails_btn = QPushButton("Clear Trails")
         self._clear_trails_btn.clicked.connect(self.clear_trails_requested)
         layout.addWidget(self._clear_trails_btn)
+
+        layout.addSpacing(12)
+        self._show_names_cb = QCheckBox("Show Names")
+        self._show_names_cb.setChecked(True)
+        self._show_names_cb.toggled.connect(self.show_names_toggled)
+        layout.addWidget(self._show_names_cb)
 
     # Public API
     def set_body_names(self, names: list[str]) -> None:
@@ -112,6 +131,18 @@ class ControlPanel(QWidget):
         if idx >= 0:
             self._center_combo.setCurrentIndex(idx)
         self._center_combo.blockSignals(False)
+
+    def set_show_names(self, checked: bool) -> None:
+        """Programmatically toggle the show names checkbox without emitting show_names_toggled."""
+        self._show_names_cb.blockSignals(True)
+        self._show_names_cb.setChecked(checked)
+        self._show_names_cb.blockSignals(False)
+
+    def set_epoch_date(self, dt: datetime) -> None:
+        """Programmatically update the epoch date widget without emitting date_changed."""
+        self._date_edit.blockSignals(True)
+        self._date_edit.setDate(QDate(dt.year, dt.month, dt.day))
+        self._date_edit.blockSignals(False)
 
     # Private slots
     def _on_date_committed(self) -> None:

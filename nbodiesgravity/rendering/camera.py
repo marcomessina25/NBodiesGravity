@@ -19,6 +19,7 @@ class Camera:
         self.elevation: float = 0.5     # radians
         self.distance: float = 6.0      # AU
         self._center_name: str = "Sun"
+        self.panning_offset: np.ndarray = np.zeros(3, dtype=np.float32)
 
     @property
     def center_name(self) -> str:
@@ -26,6 +27,13 @@ class Camera:
 
     def set_center(self, name: str) -> None:
         self._center_name = name
+        self.panning_offset = np.zeros(3, dtype=np.float32)
+
+    def set_top_view(self) -> None:
+        """Orient the camera directly above the target (looking down the Z axis)."""
+        self.azimuth = 0.0
+        self.elevation = 0.0
+        self.panning_offset = np.zeros(3, dtype=np.float32)
 
     def update_center_pos(self, snapshot: list[BodyState]) -> None:
         for state in snapshot:
@@ -33,14 +41,33 @@ class Camera:
                 self.center_pos = state.pos.astype(np.float32)
                 return
 
+    def focus_on_body(self, name: str, snapshot: list[BodyState]) -> None:
+        """Align the camera's visual target onto a body without modifying the reference center."""
+        pos_target = None
+        for state in snapshot:
+            if state.name == name:
+                pos_target = state.pos.astype(np.float32)
+                break
+        if pos_target is not None:
+            self.panning_offset = pos_target - self.center_pos
+
+    def pan(self, dx: float, dy: float) -> None:
+        """Translate the visual target offset relative to the camera look direction."""
+        view = self.view_matrix()
+        right = view[0, :3]
+        up = view[1, :3]
+        scale = self.distance * 0.0012
+        self.panning_offset += (-dx * right + dy * up) * scale
+
     def view_matrix(self) -> np.ndarray:
         """Return column-major 4×4 lookAt matrix (float32)."""
-        eye = np.array([
+        eye_offset = np.array([
             self.distance * np.cos(self.elevation) * np.sin(self.azimuth),
             self.distance * np.sin(self.elevation),
             self.distance * np.cos(self.elevation) * np.cos(self.azimuth),
         ], dtype=np.float32)
-        return _look_at(eye, np.zeros(3, dtype=np.float32),
+        eye = self.panning_offset + eye_offset
+        return _look_at(eye, self.panning_offset,
                         np.array([0.0, 1.0, 0.0], dtype=np.float32))
 
     def rotate(self, d_az: float, d_el: float) -> None:

@@ -32,6 +32,8 @@ class MainWindow(QMainWindow):
         self._loader: DateLoaderWorker | None = None
         self._progress: QProgressDialog | None = None
         self._last_epoch = datetime(2000, 1, 1)
+        self._initial_system: SolarSystem | None = None
+        self._initial_epoch: datetime = datetime(2000, 1, 1)
         self._date_timer = QTimer(self)
         self._date_timer.setInterval(250)   # 4 Hz — invisible to the user
         self._date_timer.timeout.connect(self._update_sim_date)
@@ -71,7 +73,7 @@ class MainWindow(QMainWindow):
         )
         self._ctrl.center_changed.connect(self._gl.camera.set_center)
         self._ctrl.play_toggled.connect(self._on_play_toggled)
-        self._body_list.body_selected.connect(self._gl.camera.set_center)
+        self._body_list.body_selected.connect(self._on_body_selected)
         self._body_list.body_edit_requested.connect(self._edit_body)
         self._body_list.trail_toggled.connect(self._on_trail_toggled)
         self._body_list.body_active_toggled.connect(self._on_body_active_toggled)
@@ -79,7 +81,13 @@ class MainWindow(QMainWindow):
         self._body_list.all_trails_set.connect(self._on_all_trails_set)
         self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
-        self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
+        self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
+        self._ctrl.restart_requested.connect(self._on_restart)
+        self._ctrl.top_view_requested.connect(self._on_top_view)
+        
+        self._body_list.category_active_toggled.connect(self._on_category_active_toggled)
+        self._body_list.category_trail_toggled.connect(self._on_category_trail_toggled)
+        self._body_list.category_name_toggled.connect(self._on_category_name_toggled)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -97,16 +105,24 @@ class MainWindow(QMainWindow):
 
         vm = mb.addMenu("&View")
         vm.addAction("Reset Camera",     self._reset_camera)
+        vm.addAction("Top View",         self._on_top_view)
         vm.addAction("Toggle All Trails",self._toggle_all_trails)
+        self._action_show_names = vm.addAction("Show Body Names")
+        self._action_show_names.setCheckable(True)
+        self._action_show_names.setChecked(True)
+        self._action_show_names.triggered.connect(self._on_show_names_toggled)
 
     # ----------------------------------------------------------------
     # System management
     # ----------------------------------------------------------------
 
-    def _load_system(self, system: SolarSystem) -> None:
+    def _load_system(self, system: SolarSystem, is_restart: bool = False) -> None:
         if self._sim is not None:
             self._sim.pause()
             self._sim.stop_thread()
+        if not is_restart:
+            self._initial_system = system.clone()
+            self._initial_epoch = self._last_epoch
         self._sim = SimulationThread(system)
         self._sim.blow_up_detected.connect(self._on_blow_up)
         display_infos = [
@@ -117,6 +133,7 @@ class MainWindow(QMainWindow):
         self._gl.set_simulation_thread(self._sim)
         self._ctrl.set_body_names([b.name for b in system.bodies])
         self._ctrl.set_playing(False)
+        self._ctrl.set_epoch_date(self._last_epoch)
         self._body_list.populate(system.bodies)
         self._gl.clear_trails()         # reset trails BEFORE thread writes new ones
         self._ctrl.set_sim_date("–")
@@ -132,13 +149,28 @@ class MainWindow(QMainWindow):
         if self._sim:
             self._sim.resume() if playing else self._sim.pause()
 
+    def _on_body_selected(self, name: str) -> None:
+        if self._sim:
+            snap = self._sim.latest_snapshot
+            self._gl.camera.focus_on_body(name, snap)
+            self._gl.update()
+
     def _on_date_changed(self, dt: datetime) -> None:
+        # Ignore if the target date is identical to current to prevent focus loops
+        if dt == self._last_epoch:
+            return
+            
+        # Ignore if already loading to prevent duplicate queries
+        if self._loader is not None and self._loader.isRunning():
+            return
+
         if self._sim:
             self._sim.pause()
             self._ctrl.set_playing(False)
         self._last_epoch = dt
+        num_bodies = len(self._sim.system.bodies) if self._sim else 39
         self._progress = QProgressDialog(
-            "Fetching from JPL Horizons…", "Cancel", 0, 22, self
+            "Fetching from JPL Horizons…", "Cancel", 0, num_bodies, self
         )
         self._progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress.setMinimumDuration(0)   # show immediately, don't wait 4s
@@ -151,23 +183,34 @@ class MainWindow(QMainWindow):
         self._loader.start()
 
     def _on_body_loaded(self, name: str) -> None:
-        if self._progress:
-            self._progress.setValue(self._progress.value() + 1)
-            self._progress.setLabelText(f"Loaded {name}…")
+        prog = self._progress
+        if prog is not None:
+            prog.setLabelText(f"Loaded {name}…")
+            prog.setValue(prog.value() + 1)
 
     def _on_load_finished(self, system: SolarSystem) -> None:
         if self._progress:
             self._progress.close()
+            self._progress = None
+        self._loader = None
         self._load_system(system)
 
     def _on_load_error(self, msg: str) -> None:
         if self._progress:
             self._progress.close()
+            self._progress = None
+        self._loader = None
         QMessageBox.warning(
             self, "JPL Horizons Error",
             f"Could not fetch state vectors:\n{msg}\n\nReverted to last valid epoch.",
         )
         self.statusBar().showMessage("JPL error — reverted.")
+
+    def _on_restart(self) -> None:
+        if self._initial_system is not None:
+            self._last_epoch = self._initial_epoch
+            self._load_system(self._initial_system.clone(), is_restart=True)
+            self.statusBar().showMessage("Simulation restarted.")
 
     # ----------------------------------------------------------------
     # Body editor slots
@@ -211,6 +254,7 @@ class MainWindow(QMainWindow):
             body.vel = updated.vel
             body.radius = updated.radius
             body.color = updated.color
+            body.label = updated.label
             self._refresh_after_body_change()
         if was_playing:
             self._sim.resume()
@@ -278,6 +322,45 @@ class MainWindow(QMainWindow):
             body.show_trail = enabled
         self._body_list.populate(self._sim.system.bodies)
 
+    def _on_category_active_toggled(self, label: str, active: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.active = active
+                if not active:
+                    self._gl.clear_trail_for(body.name)
+        if not active and self._gl.camera.center_name:
+            followed = self._sim.system.get_body(self._gl.camera.center_name)
+            if followed and not followed.active:
+                fallback = next(
+                    (b.name for b in self._sim.system.bodies if b.active),
+                    self._gl.camera.center_name
+                )
+                self._gl.camera.set_center(fallback)
+                self._ctrl.set_center_name(fallback)
+                self._gl.clear_trails()
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
+
+    def _on_category_trail_toggled(self, label: str, enabled: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.show_trail = enabled
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
+
+    def _on_category_name_toggled(self, label: str, enabled: bool) -> None:
+        if self._sim is None:
+            return
+        for body in self._sim.system.bodies:
+            if body.label == label:
+                body.show_name = enabled
+        self._body_list.populate(self._sim.system.bodies)
+        self._gl.update()
+
     def _refresh_after_body_change(self) -> None:
         if self._sim is None:
             return
@@ -289,6 +372,8 @@ class MainWindow(QMainWindow):
             for b in bodies
         ]
         self._gl.set_display_info(display_infos)
+        self._sim.refresh_snapshot()
+        self._gl.update()
 
     # ----------------------------------------------------------------
     # View menu
@@ -297,6 +382,12 @@ class MainWindow(QMainWindow):
     def _reset_camera(self) -> None:
         cam = self._gl.camera
         cam.azimuth, cam.elevation, cam.distance = 0.3, 0.5, 6.0
+        cam.panning_offset = np.zeros(3, dtype=np.float32)
+        self._gl.update()
+
+    def _on_top_view(self) -> None:
+        self._gl.camera.set_top_view()
+        self._gl.update()
 
     def _toggle_all_trails(self) -> None:
         if self._sim is None:
@@ -304,6 +395,18 @@ class MainWindow(QMainWindow):
         bodies = self._sim.system.bodies
         new_state = not all(b.show_trail for b in bodies)
         self._on_all_trails_set(new_state)
+
+    def _on_show_names_toggled(self, checked: bool) -> None:
+        self._ctrl.blockSignals(True)
+        self._ctrl.set_show_names(checked)
+        self._ctrl.blockSignals(False)
+        self._gl.set_show_names(checked)
+
+    def _on_show_names_toggled_from_ctrl(self, checked: bool) -> None:
+        self._action_show_names.blockSignals(True)
+        self._action_show_names.setChecked(checked)
+        self._action_show_names.blockSignals(False)
+        self._gl.set_show_names(checked)
 
     # ----------------------------------------------------------------
     # File menu
