@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
         self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
+        self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -98,6 +99,10 @@ class MainWindow(QMainWindow):
         vm = mb.addMenu("&View")
         vm.addAction("Reset Camera",     self._reset_camera)
         vm.addAction("Toggle All Trails",self._toggle_all_trails)
+        self._action_show_names = vm.addAction("Show Body Names")
+        self._action_show_names.setCheckable(True)
+        self._action_show_names.setChecked(True)
+        self._action_show_names.triggered.connect(self._on_show_names_toggled)
 
     # ----------------------------------------------------------------
     # System management
@@ -304,6 +309,18 @@ class MainWindow(QMainWindow):
         bodies = self._sim.system.bodies
         new_state = not all(b.show_trail for b in bodies)
         self._on_all_trails_set(new_state)
+
+    def _on_show_names_toggled(self, checked: bool) -> None:
+        self._ctrl.blockSignals(True)
+        self._ctrl.set_show_names(checked)
+        self._ctrl.blockSignals(False)
+        self._gl.set_show_names(checked)
+
+    def _on_show_names_toggled_from_ctrl(self, checked: bool) -> None:
+        self._action_show_names.blockSignals(True)
+        self._action_show_names.setChecked(checked)
+        self._action_show_names.blockSignals(False)
+        self._gl.set_show_names(checked)
 
     # ----------------------------------------------------------------
     # File menu

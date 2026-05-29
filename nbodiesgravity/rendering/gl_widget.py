@@ -10,7 +10,7 @@ import numpy as np
 
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QMouseEvent, QWheelEvent
+from PyQt6.QtGui import QMouseEvent, QWheelEvent, QPainter, QColor, QFont
 
 from OpenGL.GL import (
     glEnable, glClear, glClearColor, glViewport, glBlendFunc,
@@ -87,6 +87,7 @@ class GLWidget(QOpenGLWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update)
         self._timer.start(8)    # ~120 FPS
+        self._show_names = True
 
     def set_simulation_thread(self, thread) -> None:
         self._simulation_thread = thread
@@ -115,6 +116,36 @@ class GLWidget(QOpenGLWidget):
         tb = self._trail_buffers.get(name)
         if tb is not None:
             tb.reset()
+
+    def set_show_names(self, show: bool) -> None:
+        """Toggle displaying the names of the bodies."""
+        self._show_names = show
+        self.update()
+
+    def project_to_screen(self, pos_rel: np.ndarray, view: np.ndarray) -> tuple[float, float] | None:
+        """Project a 3D coordinate (relative to center) to 2D screen pixels."""
+        pos_4d = np.array([pos_rel[0], pos_rel[1], pos_rel[2], 1.0], dtype=np.float32)
+        pos_cam = view @ pos_4d
+        
+        # Check if behind camera
+        if pos_cam[2] >= 0:
+            return None
+            
+        pos_clip = self._proj @ pos_cam
+        if pos_clip[3] <= 0:
+            return None
+            
+        pos_ndc = pos_clip[:3] / pos_clip[3]
+        
+        # Check reasonable NDC bounds
+        if not (-2.0 <= pos_ndc[0] <= 2.0 and -2.0 <= pos_ndc[1] <= 2.0):
+            return None
+            
+        w = self.width()
+        h = self.height()
+        screen_x = (pos_ndc[0] + 1.0) * 0.5 * w
+        screen_y = (1.0 - pos_ndc[1]) * 0.5 * h
+        return screen_x, screen_y
 
     # ---------------------------------------------------------------
     # QOpenGLWidget callbacks
@@ -217,6 +248,69 @@ class GLWidget(QOpenGLWidget):
                 int(info.is_star if info else False),
             )
             self._sphere_mesh.draw()
+
+    def paintEvent(self, event) -> None:
+        # 1. Let OpenGL render the scene first
+        super().paintEvent(event)
+        
+        # 2. Draw 2D overlays (body names)
+        if not self._show_names:
+            return
+            
+        snap = self._simulation_thread.latest_snapshot if self._simulation_thread else None
+        if not snap:
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Premium sans-serif font
+        font = QFont("Segoe UI", 9)
+        painter.setFont(font)
+        
+        offset = self.camera.center_pos
+        view = self.camera.view_matrix()
+        
+        for state in snap:
+            if not state.active:
+                continue
+                
+            info = self._display_info.get(state.name)
+            pos_rel = state.pos - offset
+            
+            screen_pos = self.project_to_screen(pos_rel, view)
+            if screen_pos is None:
+                continue
+                
+            x, y = screen_pos
+            
+            # Determine spacing offset based on dynamic sphere size on screen
+            phys_r = info.display_radius if info else 0.002
+            r = max(phys_r, self.camera.distance * 0.008)
+            
+            # Approximate screen-space radius using projection geometry
+            # fov_factor = 2.0 * distance * tan(fov / 2)
+            fov_factor = 2.0 * self.camera.distance * 0.41421356
+            screen_r = (r / fov_factor) * self.height() if fov_factor > 0 else 10
+            screen_r = max(6.0, min(100.0, screen_r))
+            
+            text_x = x + screen_r + 6
+            text_y = y + 4
+            
+            # Draw a subtle drop shadow for perfect readability on bright/dark backgrounds
+            painter.setPen(QColor(0, 0, 0, 110))
+            painter.drawText(int(text_x + 1), int(text_y + 1), state.name)
+            
+            # Premium tint: blend 75% white with 25% of the body's actual color at 180 opacity
+            color = info.color if info else (1.0, 1.0, 1.0)
+            r_c = int((0.75 * 1.0 + 0.25 * color[0]) * 255)
+            g_c = int((0.75 * 1.0 + 0.25 * color[1]) * 255)
+            b_c = int((0.75 * 1.0 + 0.25 * color[2]) * 255)
+            
+            painter.setPen(QColor(r_c, g_c, b_c, 180))
+            painter.drawText(int(text_x), int(text_y), state.name)
+            
+        painter.end()
 
     # ---------------------------------------------------------------
     # Mouse events
