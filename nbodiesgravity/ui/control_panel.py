@@ -24,6 +24,7 @@ class ControlPanel(QWidget):
     play_toggled = pyqtSignal(bool)           # True = playing
     clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
     show_names_toggled = pyqtSignal(bool)     # True = show names
+    restart_requested = pyqtSignal()          # user clicked "Restart"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -51,6 +52,11 @@ class ControlPanel(QWidget):
         self._play_btn.setFixedWidth(90)
         self._play_btn.clicked.connect(self._on_play_clicked)
         layout.addWidget(self._play_btn)
+
+        self._restart_btn = QPushButton("↺  Restart")
+        self._restart_btn.setFixedWidth(90)
+        self._restart_btn.clicked.connect(self.restart_requested)
+        layout.addWidget(self._restart_btn)
 
         layout.addSpacing(12)
 
@@ -125,6 +131,12 @@ class ControlPanel(QWidget):
         self._show_names_cb.blockSignals(True)
         self._show_names_cb.setChecked(checked)
         self._show_names_cb.blockSignals(False)
+
+    def set_epoch_date(self, dt: datetime) -> None:
+        """Programmatically update the epoch date widget without emitting date_changed."""
+        self._date_edit.blockSignals(True)
+        self._date_edit.setDate(QDate(dt.year, dt.month, dt.day))
+        self._date_edit.blockSignals(False)
 
     # Private slots
     def _on_date_committed(self) -> None:

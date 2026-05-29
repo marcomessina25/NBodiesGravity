@@ -50,48 +50,84 @@ class BodyEditorDialog(QDialog):
     def _build_ui(self, body: CelestialBody | None) -> None:
         form = QFormLayout(self)
 
-        # ---- Template selector (Add mode only) ----
-        if not self._edit_mode and self._template_bodies:
-            self._template_combo = QComboBox()
-            self._template_combo.addItem("Blank")
-            for name in self._template_bodies:
-                self._template_combo.addItem(name)
-            if len(self._template_bodies) >= 2:
-                self._template_combo.addItem("Average of two…")
-            self._template_combo.currentTextChanged.connect(self._on_template_changed)
-            form.addRow("Template:", self._template_combo)
-
-            if len(self._template_bodies) >= 2:
-                self._avg_container = QWidget()
-                avg_inner = QFormLayout(self._avg_container)
-                avg_inner.setContentsMargins(0, 0, 0, 0)
-                self._avg_a_combo = QComboBox()
-                self._avg_b_combo = QComboBox()
-                for name in self._template_bodies:
-                    self._avg_a_combo.addItem(name)
-                    self._avg_b_combo.addItem(name)
-                self._avg_a_combo.setCurrentIndex(-1)
-                self._avg_b_combo.setCurrentIndex(-1)
-                self._avg_a_combo.currentTextChanged.connect(self._on_avg_selection_changed)
-                self._avg_b_combo.currentTextChanged.connect(self._on_avg_selection_changed)
-                avg_inner.addRow("Body A:", self._avg_a_combo)
-                avg_inner.addRow("Body B:", self._avg_b_combo)
-                self._avg_container.setVisible(False)
-                form.addRow(self._avg_container)
-
-        # ---- Main fields ----
+        # Name row
         self._name_edit = QLineEdit(body.name if body else "")
         self._name_edit.textChanged.connect(self._validate)
         form.addRow("Name:", self._name_edit)
 
+        # Mass rows
         self._mass_spin = _sci_spin(1e-3, 2e30, body.mass if body else 1e22)
         self._mass_spin.valueChanged.connect(self._validate)
-        form.addRow("Mass (kg):", self._mass_spin)
 
+        if not self._edit_mode and self._template_bodies:
+            self._mass_mode_combo = QComboBox()
+            self._mass_mode_combo.addItems(["Manual", "Template * Multiplier"])
+            self._mass_mode_combo.currentTextChanged.connect(self._on_mass_mode_changed)
+            form.addRow("Mass Mode:", self._mass_mode_combo)
+
+            self._mass_template_container = QWidget()
+            mass_temp_layout = QHBoxLayout(self._mass_template_container)
+            mass_temp_layout.setContentsMargins(0, 0, 0, 0)
+            self._mass_template_combo = QComboBox()
+            for name in self._template_bodies:
+                self._mass_template_combo.addItem(name)
+            self._mass_template_combo.currentTextChanged.connect(lambda _: self._update_templated_mass())
+
+            self._mass_mult_spin = QDoubleSpinBox()
+            self._mass_mult_spin.setRange(1e-6, 1e6)
+            self._mass_mult_spin.setValue(1.0)
+            self._mass_mult_spin.setDecimals(4)
+            self._mass_mult_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+            self._mass_mult_spin.valueChanged.connect(lambda _: self._update_templated_mass())
+
+            mass_temp_layout.addWidget(QLabel("Body:"))
+            mass_temp_layout.addWidget(self._mass_template_combo)
+            mass_temp_layout.addWidget(QLabel("Multiplier:"))
+            mass_temp_layout.addWidget(self._mass_mult_spin)
+
+            form.addRow("Mass (kg):", self._mass_spin)
+            form.addRow("Mass Template Source:", self._mass_template_container)
+            self._mass_template_container.setVisible(False)
+        else:
+            form.addRow("Mass (kg):", self._mass_spin)
+
+        # Radius rows
         self._radius_spin = _sci_spin(0.1, 1e7, body.radius if body else 1000.0)
         self._radius_spin.valueChanged.connect(self._validate)
-        form.addRow("Radius (km):", self._radius_spin)
 
+        if not self._edit_mode and self._template_bodies:
+            self._radius_mode_combo = QComboBox()
+            self._radius_mode_combo.addItems(["Manual", "Template * Multiplier"])
+            self._radius_mode_combo.currentTextChanged.connect(self._on_radius_mode_changed)
+            form.addRow("Radius Mode:", self._radius_mode_combo)
+
+            self._radius_template_container = QWidget()
+            rad_temp_layout = QHBoxLayout(self._radius_template_container)
+            rad_temp_layout.setContentsMargins(0, 0, 0, 0)
+            self._radius_template_combo = QComboBox()
+            for name in self._template_bodies:
+                self._radius_template_combo.addItem(name)
+            self._radius_template_combo.currentTextChanged.connect(lambda _: self._update_templated_radius())
+
+            self._radius_mult_spin = QDoubleSpinBox()
+            self._radius_mult_spin.setRange(1e-6, 1e6)
+            self._radius_mult_spin.setValue(1.0)
+            self._radius_mult_spin.setDecimals(4)
+            self._radius_mult_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+            self._radius_mult_spin.valueChanged.connect(lambda _: self._update_templated_radius())
+
+            rad_temp_layout.addWidget(QLabel("Body:"))
+            rad_temp_layout.addWidget(self._radius_template_combo)
+            rad_temp_layout.addWidget(QLabel("Multiplier:"))
+            rad_temp_layout.addWidget(self._radius_mult_spin)
+
+            form.addRow("Radius (km):", self._radius_spin)
+            form.addRow("Radius Template Source:", self._radius_template_container)
+            self._radius_template_container.setVisible(False)
+        else:
+            form.addRow("Radius (km):", self._radius_spin)
+
+        # Color row
         cw = QWidget()
         cl = QHBoxLayout(cw)
         cl.setContentsMargins(0, 0, 0, 0)
@@ -102,22 +138,109 @@ class BodyEditorDialog(QDialog):
         self._update_color_btn()
         form.addRow("Color:", cw)
 
+        # Position rows
         pos = body.pos if body else np.zeros(3)
         self._px = _au_spin(pos[0])
         self._py = _au_spin(pos[1])
         self._pz = _au_spin(pos[2])
-        form.addRow("Position X (AU):", self._px)
-        form.addRow("Position Y (AU):", self._py)
-        form.addRow("Position Z (AU):", self._pz)
 
+        if not self._edit_mode and self._template_bodies:
+            self._pos_mode_combo = QComboBox()
+            self._pos_mode_combo.addItems(["Manual", "From Template", "Average of Two"])
+            self._pos_mode_combo.currentTextChanged.connect(self._on_pos_mode_changed)
+            form.addRow("Position Mode:", self._pos_mode_combo)
+
+            self._pos_template_container = QWidget()
+            pos_temp_layout = QHBoxLayout(self._pos_template_container)
+            pos_temp_layout.setContentsMargins(0, 0, 0, 0)
+            self._pos_template_combo = QComboBox()
+            for name in self._template_bodies:
+                self._pos_template_combo.addItem(name)
+            self._pos_template_combo.currentTextChanged.connect(lambda _: self._update_templated_pos())
+            pos_temp_layout.addWidget(QLabel("Body:"))
+            pos_temp_layout.addWidget(self._pos_template_combo)
+
+            self._pos_avg_container = QWidget()
+            pos_avg_layout = QHBoxLayout(self._pos_avg_container)
+            pos_avg_layout.setContentsMargins(0, 0, 0, 0)
+            self._pos_avg_a_combo = QComboBox()
+            self._pos_avg_b_combo = QComboBox()
+            for name in self._template_bodies:
+                self._pos_avg_a_combo.addItem(name)
+                self._pos_avg_b_combo.addItem(name)
+            self._pos_avg_a_combo.setCurrentIndex(-1)
+            self._pos_avg_b_combo.setCurrentIndex(-1)
+            self._pos_avg_a_combo.currentTextChanged.connect(lambda _: self._update_templated_pos())
+            self._pos_avg_b_combo.currentTextChanged.connect(lambda _: self._update_templated_pos())
+            pos_avg_layout.addWidget(QLabel("Body A:"))
+            pos_avg_layout.addWidget(self._pos_avg_a_combo)
+            pos_avg_layout.addWidget(QLabel("Body B:"))
+            pos_avg_layout.addWidget(self._pos_avg_b_combo)
+
+            form.addRow("Position X (AU):", self._px)
+            form.addRow("Position Y (AU):", self._py)
+            form.addRow("Position Z (AU):", self._pz)
+            form.addRow("Position Template:", self._pos_template_container)
+            form.addRow("Position Averages:", self._pos_avg_container)
+            self._pos_template_container.setVisible(False)
+            self._pos_avg_container.setVisible(False)
+        else:
+            form.addRow("Position X (AU):", self._px)
+            form.addRow("Position Y (AU):", self._py)
+            form.addRow("Position Z (AU):", self._pz)
+
+        # Velocity rows
         vel = body.vel if body else np.zeros(3)
         self._vx = _au_spin(vel[0])
         self._vy = _au_spin(vel[1])
         self._vz = _au_spin(vel[2])
-        form.addRow("Velocity VX (AU/day):", self._vx)
-        form.addRow("Velocity VY (AU/day):", self._vy)
-        form.addRow("Velocity VZ (AU/day):", self._vz)
 
+        if not self._edit_mode and self._template_bodies:
+            self._vel_mode_combo = QComboBox()
+            self._vel_mode_combo.addItems(["Manual", "From Template", "Average of Two"])
+            self._vel_mode_combo.currentTextChanged.connect(self._on_vel_mode_changed)
+            form.addRow("Velocity Mode:", self._vel_mode_combo)
+
+            self._vel_template_container = QWidget()
+            vel_temp_layout = QHBoxLayout(self._vel_template_container)
+            vel_temp_layout.setContentsMargins(0, 0, 0, 0)
+            self._vel_template_combo = QComboBox()
+            for name in self._template_bodies:
+                self._vel_template_combo.addItem(name)
+            self._vel_template_combo.currentTextChanged.connect(lambda _: self._update_templated_vel())
+            vel_temp_layout.addWidget(QLabel("Body:"))
+            vel_temp_layout.addWidget(self._vel_template_combo)
+
+            self._vel_avg_container = QWidget()
+            vel_avg_layout = QHBoxLayout(self._vel_avg_container)
+            vel_avg_layout.setContentsMargins(0, 0, 0, 0)
+            self._vel_avg_a_combo = QComboBox()
+            self._vel_avg_b_combo = QComboBox()
+            for name in self._template_bodies:
+                self._vel_avg_a_combo.addItem(name)
+                self._vel_avg_b_combo.addItem(name)
+            self._vel_avg_a_combo.setCurrentIndex(-1)
+            self._vel_avg_b_combo.setCurrentIndex(-1)
+            self._vel_avg_a_combo.currentTextChanged.connect(lambda _: self._update_templated_vel())
+            self._vel_avg_b_combo.currentTextChanged.connect(lambda _: self._update_templated_vel())
+            vel_avg_layout.addWidget(QLabel("Body A:"))
+            vel_avg_layout.addWidget(self._vel_avg_a_combo)
+            vel_avg_layout.addWidget(QLabel("Body B:"))
+            vel_avg_layout.addWidget(self._vel_avg_b_combo)
+
+            form.addRow("Velocity VX (AU/day):", self._vx)
+            form.addRow("Velocity VY (AU/day):", self._vy)
+            form.addRow("Velocity VZ (AU/day):", self._vz)
+            form.addRow("Velocity Template:", self._vel_template_container)
+            form.addRow("Velocity Averages:", self._vel_avg_container)
+            self._vel_template_container.setVisible(False)
+            self._vel_avg_container.setVisible(False)
+        else:
+            form.addRow("Velocity VX (AU/day):", self._vx)
+            form.addRow("Velocity VY (AU/day):", self._vy)
+            form.addRow("Velocity VZ (AU/day):", self._vz)
+
+        # OK / Cancel Buttons
         self._err = QLabel("")
         self._err.setStyleSheet("color: red;")
         form.addRow(self._err)
@@ -156,80 +279,99 @@ class BodyEditorDialog(QDialog):
         self._err.setText(err)
         self._btns.button(QDialogButtonBox.StandardButton.Ok).setEnabled(err == "")
 
-    def _on_template_changed(self, text: str) -> None:
-        has_avg = hasattr(self, "_avg_container")
-        if has_avg and text == "Average of two…":
-            self._avg_container.setVisible(True)
-            self._avg_a_combo.setCurrentIndex(-1)
-            self._avg_b_combo.setCurrentIndex(-1)
+    # ---- Mass template slots ----
+    def _on_mass_mode_changed(self, text: str) -> None:
+        is_manual = (text == "Manual")
+        self._mass_spin.setEnabled(is_manual)
+        self._mass_template_container.setVisible(not is_manual)
+        if not is_manual:
+            self._update_templated_mass()
+
+    def _update_templated_mass(self) -> None:
+        if not hasattr(self, "_mass_template_combo"):
             return
-        if has_avg:
-            self._avg_container.setVisible(False)
-        if text == "Blank":
-            self._clear_fields()
-        elif text in self._template_bodies:
-            self._fill_from_body(self._template_bodies[text])
+        t_name = self._mass_template_combo.currentText()
+        if t_name in self._template_bodies:
+            base_mass = self._template_bodies[t_name].mass
+            mult = self._mass_mult_spin.value()
+            self._mass_spin.setValue(base_mass * mult)
 
-    def _on_avg_selection_changed(self) -> None:
-        a_name = self._avg_a_combo.currentText()
-        b_name = self._avg_b_combo.currentText()
-        if (a_name and b_name
-                and a_name in self._template_bodies
-                and b_name in self._template_bodies):
-            # Same body for A and B is intentionally accepted: (x+x)/2 == x,
-            # producing the same result as a direct copy (Blank + manual entry).
-            self._fill_from_average(
-                self._template_bodies[a_name],
-                self._template_bodies[b_name],
-            )
+    # ---- Radius template slots ----
+    def _on_radius_mode_changed(self, text: str) -> None:
+        is_manual = (text == "Manual")
+        self._radius_spin.setEnabled(is_manual)
+        self._radius_template_container.setVisible(not is_manual)
+        if not is_manual:
+            self._update_templated_radius()
 
-    def _clear_fields(self) -> None:
-        self._name_edit.clear()
-        self._mass_spin.setValue(1e22)
-        self._radius_spin.setValue(1000.0)
-        self._px.setValue(0.0)
-        self._py.setValue(0.0)
-        self._pz.setValue(0.0)
-        self._vx.setValue(0.0)
-        self._vy.setValue(0.0)
-        self._vz.setValue(0.0)
-        self._color = (1.0, 1.0, 1.0)
-        self._update_color_btn()
-        self._validate()
+    def _update_templated_radius(self) -> None:
+        if not hasattr(self, "_radius_template_combo"):
+            return
+        t_name = self._radius_template_combo.currentText()
+        if t_name in self._template_bodies:
+            base_rad = self._template_bodies[t_name].radius
+            mult = self._radius_mult_spin.value()
+            self._radius_spin.setValue(base_rad * mult)
 
-    def _fill_from_body(self, body: CelestialBody) -> None:
-        self._name_edit.clear()
-        self._mass_spin.setValue(body.mass)
-        self._radius_spin.setValue(body.radius)
-        self._px.setValue(float(body.pos[0]))
-        self._py.setValue(float(body.pos[1]))
-        self._pz.setValue(float(body.pos[2]))
-        self._vx.setValue(float(body.vel[0]))
-        self._vy.setValue(float(body.vel[1]))
-        self._vz.setValue(float(body.vel[2]))
-        self._color = body.color
-        self._update_color_btn()
-        self._validate()
+    # ---- Position template slots ----
+    def _on_pos_mode_changed(self, text: str) -> None:
+        self._px.setEnabled(text == "Manual")
+        self._py.setEnabled(text == "Manual")
+        self._pz.setEnabled(text == "Manual")
+        self._pos_template_container.setVisible(text == "From Template")
+        self._pos_avg_container.setVisible(text == "Average of Two")
+        if text != "Manual":
+            self._update_templated_pos()
 
-    def _fill_from_average(self, a: CelestialBody, b: CelestialBody) -> None:
-        avg_pos = (a.pos + b.pos) / 2
-        avg_vel = (a.vel + b.vel) / 2
-        self._name_edit.clear()
-        self._mass_spin.setValue((a.mass + b.mass) / 2)
-        self._radius_spin.setValue((a.radius + b.radius) / 2)
-        self._px.setValue(float(avg_pos[0]))
-        self._py.setValue(float(avg_pos[1]))
-        self._pz.setValue(float(avg_pos[2]))
-        self._vx.setValue(float(avg_vel[0]))
-        self._vy.setValue(float(avg_vel[1]))
-        self._vz.setValue(float(avg_vel[2]))
-        self._color = (
-            (a.color[0] + b.color[0]) / 2,
-            (a.color[1] + b.color[1]) / 2,
-            (a.color[2] + b.color[2]) / 2,
-        )
-        self._update_color_btn()
-        self._validate()
+    def _update_templated_pos(self) -> None:
+        mode = self._pos_mode_combo.currentText()
+        if mode == "From Template":
+            t_name = self._pos_template_combo.currentText()
+            if t_name in self._template_bodies:
+                body = self._template_bodies[t_name]
+                self._px.setValue(float(body.pos[0]))
+                self._py.setValue(float(body.pos[1]))
+                self._pz.setValue(float(body.pos[2]))
+        elif mode == "Average of Two":
+            a_name = self._pos_avg_a_combo.currentText()
+            b_name = self._pos_avg_b_combo.currentText()
+            if (a_name and b_name
+                    and a_name in self._template_bodies
+                    and b_name in self._template_bodies):
+                avg_pos = (self._template_bodies[a_name].pos + self._template_bodies[b_name].pos) / 2.0
+                self._px.setValue(float(avg_pos[0]))
+                self._py.setValue(float(avg_pos[1]))
+                self._pz.setValue(float(avg_pos[2]))
+
+    # ---- Velocity template slots ----
+    def _on_vel_mode_changed(self, text: str) -> None:
+        self._vx.setEnabled(text == "Manual")
+        self._vy.setEnabled(text == "Manual")
+        self._vz.setEnabled(text == "Manual")
+        self._vel_template_container.setVisible(text == "From Template")
+        self._vel_avg_container.setVisible(text == "Average of Two")
+        if text != "Manual":
+            self._update_templated_vel()
+
+    def _update_templated_vel(self) -> None:
+        mode = self._vel_mode_combo.currentText()
+        if mode == "From Template":
+            t_name = self._vel_template_combo.currentText()
+            if t_name in self._template_bodies:
+                body = self._template_bodies[t_name]
+                self._vx.setValue(float(body.vel[0]))
+                self._vy.setValue(float(body.vel[1]))
+                self._vz.setValue(float(body.vel[2]))
+        elif mode == "Average of Two":
+            a_name = self._vel_avg_a_combo.currentText()
+            b_name = self._vel_avg_b_combo.currentText()
+            if (a_name and b_name
+                    and a_name in self._template_bodies
+                    and b_name in self._template_bodies):
+                avg_vel = (self._template_bodies[a_name].vel + self._template_bodies[b_name].vel) / 2.0
+                self._vx.setValue(float(avg_vel[0]))
+                self._vy.setValue(float(avg_vel[1]))
+                self._vz.setValue(float(avg_vel[2]))
 
 
 def _sci_spin(min_v: float, max_v: float, value: float) -> QDoubleSpinBox:

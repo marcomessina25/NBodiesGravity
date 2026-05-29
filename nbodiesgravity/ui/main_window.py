@@ -32,6 +32,8 @@ class MainWindow(QMainWindow):
         self._loader: DateLoaderWorker | None = None
         self._progress: QProgressDialog | None = None
         self._last_epoch = datetime(2000, 1, 1)
+        self._initial_system: SolarSystem | None = None
+        self._initial_epoch: datetime = datetime(2000, 1, 1)
         self._date_timer = QTimer(self)
         self._date_timer.setInterval(250)   # 4 Hz — invisible to the user
         self._date_timer.timeout.connect(self._update_sim_date)
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
         self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
         self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
+        self._ctrl.restart_requested.connect(self._on_restart)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -108,10 +111,13 @@ class MainWindow(QMainWindow):
     # System management
     # ----------------------------------------------------------------
 
-    def _load_system(self, system: SolarSystem) -> None:
+    def _load_system(self, system: SolarSystem, is_restart: bool = False) -> None:
         if self._sim is not None:
             self._sim.pause()
             self._sim.stop_thread()
+        if not is_restart:
+            self._initial_system = system.clone()
+            self._initial_epoch = self._last_epoch
         self._sim = SimulationThread(system)
         self._sim.blow_up_detected.connect(self._on_blow_up)
         display_infos = [
@@ -122,6 +128,7 @@ class MainWindow(QMainWindow):
         self._gl.set_simulation_thread(self._sim)
         self._ctrl.set_body_names([b.name for b in system.bodies])
         self._ctrl.set_playing(False)
+        self._ctrl.set_epoch_date(self._last_epoch)
         self._body_list.populate(system.bodies)
         self._gl.clear_trails()         # reset trails BEFORE thread writes new ones
         self._ctrl.set_sim_date("–")
@@ -138,6 +145,14 @@ class MainWindow(QMainWindow):
             self._sim.resume() if playing else self._sim.pause()
 
     def _on_date_changed(self, dt: datetime) -> None:
+        # Ignore if the target date is identical to current to prevent focus loops
+        if dt == self._last_epoch:
+            return
+            
+        # Ignore if already loading to prevent duplicate queries
+        if self._loader is not None and self._loader.isRunning():
+            return
+
         if self._sim:
             self._sim.pause()
             self._ctrl.set_playing(False)
@@ -163,16 +178,26 @@ class MainWindow(QMainWindow):
     def _on_load_finished(self, system: SolarSystem) -> None:
         if self._progress:
             self._progress.close()
+            self._progress = None
+        self._loader = None
         self._load_system(system)
 
     def _on_load_error(self, msg: str) -> None:
         if self._progress:
             self._progress.close()
+            self._progress = None
+        self._loader = None
         QMessageBox.warning(
             self, "JPL Horizons Error",
             f"Could not fetch state vectors:\n{msg}\n\nReverted to last valid epoch.",
         )
         self.statusBar().showMessage("JPL error — reverted.")
+
+    def _on_restart(self) -> None:
+        if self._initial_system is not None:
+            self._last_epoch = self._initial_epoch
+            self._load_system(self._initial_system.clone(), is_restart=True)
+            self.statusBar().showMessage("Simulation restarted.")
 
     # ----------------------------------------------------------------
     # Body editor slots
