@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         )
         self._ctrl.center_changed.connect(self._gl.camera.set_center)
         self._ctrl.play_toggled.connect(self._on_play_toggled)
-        self._body_list.body_selected.connect(self._gl.camera.set_center)
+        self._body_list.body_selected.connect(self._on_body_selected)
         self._body_list.body_edit_requested.connect(self._edit_body)
         self._body_list.trail_toggled.connect(self._on_trail_toggled)
         self._body_list.body_active_toggled.connect(self._on_body_active_toggled)
@@ -81,7 +81,6 @@ class MainWindow(QMainWindow):
         self._body_list.all_trails_set.connect(self._on_all_trails_set)
         self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
-        self._body_list.body_selected.connect(lambda _: self._gl.clear_trails())
         self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
         self._ctrl.restart_requested.connect(self._on_restart)
 
@@ -143,6 +142,12 @@ class MainWindow(QMainWindow):
     def _on_play_toggled(self, playing: bool) -> None:
         if self._sim:
             self._sim.resume() if playing else self._sim.pause()
+
+    def _on_body_selected(self, name: str) -> None:
+        if self._sim:
+            snap = self._sim.latest_snapshot
+            self._gl.camera.focus_on_body(name, snap)
+            self._gl.update()
 
     def _on_date_changed(self, dt: datetime) -> None:
         # Ignore if the target date is identical to current to prevent focus loops

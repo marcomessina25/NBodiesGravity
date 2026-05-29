@@ -335,9 +335,7 @@ class GLWidget(QOpenGLWidget):
         if self._last_mouse_btn == Qt.MouseButton.LeftButton:
             self.camera.rotate(dx * 0.005, -dy * 0.005)
         elif self._last_mouse_btn == Qt.MouseButton.RightButton:
-            self.camera.distance = max(
-                0.001, self.camera.distance + dy * self.camera.distance * 0.005
-            )
+            self.camera.pan(dx, dy)
         self._last_mouse_pos = event.position()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
