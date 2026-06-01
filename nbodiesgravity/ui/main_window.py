@@ -167,8 +167,11 @@ class MainWindow(QMainWindow):
         if self._sim:
             self._sim.pause()
             self._ctrl.set_playing(False)
+            with self._sim._lock:
+                num_bodies = len(self._sim.system.bodies)
+        else:
+            num_bodies = 39
         self._last_epoch = dt
-        num_bodies = len(self._sim.system.bodies) if self._sim else 39
         self._progress = QProgressDialog(
             "Fetching from JPL Horizons…", "Cancel", 0, num_bodies, self
         )
@@ -216,48 +219,81 @@ class MainWindow(QMainWindow):
     # Body editor slots
     # ----------------------------------------------------------------
 
+    # Body editor slots
+    # ----------------------------------------------------------------
+
     def _add_body(self) -> None:
         if self._sim is None:
             return
-        was_playing = self._sim.is_playing
         self._sim.pause()
-        existing = [b.name for b in self._sim.system.bodies]
+        self._ctrl.set_playing(False)
+        with self._sim._lock:
+            bodies = self._sim.system.bodies
+        existing = [b.name for b in bodies]
         dlg = BodyEditorDialog(
             existing_names=existing,
-            template_bodies=self._sim.system.bodies,
+            template_bodies=bodies,
             parent=self,
         )
         if dlg.exec() == BodyEditorDialog.DialogCode.Accepted:
             body = dlg.result_body()
-            self._sim.system.add_body(body)
+            with self._sim._lock:
+                self._sim.system.add_body(body)
+                if self._initial_system is not None:
+                    initial_body = CelestialBody(
+                        name=body.name,
+                        mass=body.mass,
+                        pos=body.pos.copy(),
+                        vel=body.vel.copy(),
+                        radius=body.radius,
+                        color=body.color,
+                        show_trail=body.show_trail,
+                        active=body.active,
+                        label=body.label,
+                        show_name=body.show_name,
+                    )
+                    self._initial_system.add_body(initial_body)
             self._refresh_after_body_change()
-        if was_playing:
-            self._sim.resume()
 
     def _edit_body(self, name: str | None) -> None:
         if not name or self._sim is None:
             return
-        was_playing = self._sim.is_playing
         self._sim.pause()
-        body = self._sim.system.get_body(name)
+        self._ctrl.set_playing(False)
+        with self._sim._lock:
+            body = self._sim.system.get_body(name)
+            bodies = self._sim.system.bodies
         if body is None:
-            if was_playing:
-                self._sim.resume()
             return
-        existing = [b.name for b in self._sim.system.bodies if b.name != name]
-        dlg = BodyEditorDialog(existing_names=existing, body=body, parent=self)
+        existing = [b.name for b in bodies if b.name != name]
+        templates = [b for b in bodies if b.name != name]
+        dlg = BodyEditorDialog(
+            existing_names=existing,
+            body=body,
+            template_bodies=templates,
+            parent=self,
+        )
         if dlg.exec() == BodyEditorDialog.DialogCode.Accepted:
             updated = dlg.result_body()
-            body.name = updated.name
-            body.mass = updated.mass
-            body.pos = updated.pos
-            body.vel = updated.vel
-            body.radius = updated.radius
-            body.color = updated.color
-            body.label = updated.label
+            with self._sim._lock:
+                body.name = updated.name
+                body.mass = updated.mass
+                body.pos = updated.pos
+                body.vel = updated.vel
+                body.radius = updated.radius
+                body.color = updated.color
+                body.label = updated.label
+                if self._initial_system is not None:
+                    initial_body = self._initial_system.get_body(name)
+                    if initial_body:
+                        initial_body.name = updated.name
+                        initial_body.mass = updated.mass
+                        initial_body.pos = updated.pos.copy()
+                        initial_body.vel = updated.vel.copy()
+                        initial_body.radius = updated.radius
+                        initial_body.color = updated.color
+                        initial_body.label = updated.label
             self._refresh_after_body_change()
-        if was_playing:
-            self._sim.resume()
 
     def _remove_selected(self) -> None:
         name = self._body_list.selected_name()
@@ -268,111 +304,153 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         ) != QMessageBox.StandardButton.Yes:
             return
-        was_playing = self._sim.is_playing
         self._sim.pause()
-        self._sim.system.remove_body(name)
+        self._ctrl.set_playing(False)
+        with self._sim._lock:
+            self._sim.system.remove_body(name)
+            if self._initial_system is not None:
+                self._initial_system.remove_body(name)
         self._refresh_after_body_change()
-        if was_playing:
-            self._sim.resume()
 
     def _on_trail_toggled(self, name: str, enabled: bool) -> None:
         if self._sim:
-            body = self._sim.system.get_body(name)
-            if body:
-                body.show_trail = enabled
+            with self._sim._lock:
+                body = self._sim.system.get_body(name)
+                if body:
+                    body.show_trail = enabled
+                    if self._initial_system is not None:
+                        initial_body = self._initial_system.get_body(name)
+                        if initial_body:
+                            initial_body.show_trail = enabled
 
     def _on_body_active_toggled(self, name: str, active: bool) -> None:
         if self._sim is None:
             return
-        body = self._sim.system.get_body(name)
-        if body:
-            body.active = active
-            if not active:
-                self._gl.clear_trail_for(name)
-                # If the camera is following this body, move to the first remaining
-                # active body so the camera does not freeze on a deactivated body.
-                if self._gl.camera.center_name == name:
-                    fallback = next(
-                        (b.name for b in self._sim.system.bodies
-                         if b.active and b.name != name),
-                        name,  # last resort: stay on frozen body
-                    )
-                    self._gl.camera.set_center(fallback)
-                    self._ctrl.set_center_name(fallback)
-                    self._gl.clear_trails()
+        with self._sim._lock:
+            body = self._sim.system.get_body(name)
+            if body:
+                body.active = active
+                if self._initial_system is not None:
+                    initial_body = self._initial_system.get_body(name)
+                    if initial_body:
+                        initial_body.active = active
+                if not active:
+                    self._gl.clear_trail_for(name)
+                    # If the camera is following this body, move to the first remaining
+                    # active body so the camera does not freeze on a deactivated body.
+                    if self._gl.camera.center_name == name:
+                        fallback = next(
+                            (b.name for b in self._sim.system.bodies
+                             if b.active and b.name != name),
+                            name,  # last resort: stay on frozen body
+                        )
+                        self._gl.camera.set_center(fallback)
+                        self._ctrl.set_center_name(fallback)
+                        self._gl.clear_trails()
 
     def _on_all_bodies_set(self, active: bool) -> None:
         if self._sim is None:
             return
-        for body in self._sim.system.bodies:
-            body.active = active
-        if not active:
-            self._gl.clear_trails()
-            # All bodies deactivated — reset camera center to Sun so it does
-            # not freeze at the last position of whatever body was followed.
-            if self._gl.camera.center_name != "Sun":
-                self._gl.camera.set_center("Sun")
-                self._ctrl.set_center_name("Sun")
-        self._body_list.populate(self._sim.system.bodies)
+        with self._sim._lock:
+            for body in self._sim.system.bodies:
+                body.active = active
+                if self._initial_system is not None:
+                    initial_body = self._initial_system.get_body(body.name)
+                    if initial_body:
+                        initial_body.active = active
+            if not active:
+                self._gl.clear_trails()
+                # All bodies deactivated — reset camera center to Sun so it does
+                # not freeze at the last position of whatever body was followed.
+                if self._gl.camera.center_name != "Sun":
+                    self._gl.camera.set_center("Sun")
+                    self._ctrl.set_center_name("Sun")
+            bodies = self._sim.system.bodies
+        self._body_list.populate(bodies)
 
     def _on_all_trails_set(self, enabled: bool) -> None:
         if self._sim is None:
             return
-        for body in self._sim.system.bodies:
-            body.show_trail = enabled
-        self._body_list.populate(self._sim.system.bodies)
+        with self._sim._lock:
+            for body in self._sim.system.bodies:
+                body.show_trail = enabled
+                if self._initial_system is not None:
+                    initial_body = self._initial_system.get_body(body.name)
+                    if initial_body:
+                        initial_body.show_trail = enabled
+            bodies = self._sim.system.bodies
+        self._body_list.populate(bodies)
 
     def _on_category_active_toggled(self, label: str, active: bool) -> None:
         if self._sim is None:
             return
-        for body in self._sim.system.bodies:
-            if body.label == label:
-                body.active = active
-                if not active:
-                    self._gl.clear_trail_for(body.name)
-        if not active and self._gl.camera.center_name:
-            followed = self._sim.system.get_body(self._gl.camera.center_name)
-            if followed and not followed.active:
-                fallback = next(
-                    (b.name for b in self._sim.system.bodies if b.active),
-                    self._gl.camera.center_name
-                )
-                self._gl.camera.set_center(fallback)
-                self._ctrl.set_center_name(fallback)
-                self._gl.clear_trails()
-        self._body_list.populate(self._sim.system.bodies)
+        with self._sim._lock:
+            for body in self._sim.system.bodies:
+                if body.label == label:
+                    body.active = active
+                    if self._initial_system is not None:
+                        initial_body = self._initial_system.get_body(body.name)
+                        if initial_body:
+                            initial_body.active = active
+                    if not active:
+                        self._gl.clear_trail_for(body.name)
+            if not active and self._gl.camera.center_name:
+                followed = self._sim.system.get_body(self._gl.camera.center_name)
+                if followed and not followed.active:
+                    fallback = next(
+                        (b.name for b in self._sim.system.bodies if b.active),
+                        self._gl.camera.center_name
+                    )
+                    self._gl.camera.set_center(fallback)
+                    self._ctrl.set_center_name(fallback)
+                    self._gl.clear_trails()
+            bodies = self._sim.system.bodies
+        self._body_list.populate(bodies)
         self._gl.update()
 
     def _on_category_trail_toggled(self, label: str, enabled: bool) -> None:
         if self._sim is None:
             return
-        for body in self._sim.system.bodies:
-            if body.label == label:
-                body.show_trail = enabled
-        self._body_list.populate(self._sim.system.bodies)
+        with self._sim._lock:
+            for body in self._sim.system.bodies:
+                if body.label == label:
+                    body.show_trail = enabled
+                    if self._initial_system is not None:
+                        initial_body = self._initial_system.get_body(body.name)
+                        if initial_body:
+                            initial_body.show_trail = enabled
+            bodies = self._sim.system.bodies
+        self._body_list.populate(bodies)
         self._gl.update()
 
     def _on_category_name_toggled(self, label: str, enabled: bool) -> None:
         if self._sim is None:
             return
-        for body in self._sim.system.bodies:
-            if body.label == label:
-                body.show_name = enabled
-        self._body_list.populate(self._sim.system.bodies)
+        with self._sim._lock:
+            for body in self._sim.system.bodies:
+                if body.label == label:
+                    body.show_name = enabled
+                    if self._initial_system is not None:
+                        initial_body = self._initial_system.get_body(body.name)
+                        if initial_body:
+                            initial_body.show_name = enabled
+            bodies = self._sim.system.bodies
+        self._body_list.populate(bodies)
         self._gl.update()
 
     def _refresh_after_body_change(self) -> None:
         if self._sim is None:
             return
-        bodies = self._sim.system.bodies
+        with self._sim._lock:
+            bodies = self._sim.system.bodies
+            display_infos = [
+                BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.name == "Sun"))
+                for b in bodies
+            ]
+            self._sim.latest_snapshot = self._sim.system.snapshot()
         self._body_list.populate(bodies)
         self._ctrl.set_body_names([b.name for b in bodies])
-        display_infos = [
-            BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.name == "Sun"))
-            for b in bodies
-        ]
         self._gl.set_display_info(display_infos)
-        self._sim.refresh_snapshot()
         self._gl.update()
 
     # ----------------------------------------------------------------
@@ -423,23 +501,26 @@ class MainWindow(QMainWindow):
             return
         was_playing = self._sim.is_playing
         self._sim.pause()
-        bodies = self._sim.system.bodies
-        data = {
-            "bodies": [
-                {
-                    "name": b.name, "mass_kg": b.mass, "radius_km": b.radius,
-                    "color": list(b.color),
-                    "pos_au": b.pos.tolist(),
-                    "vel_au_per_day": b.vel.tolist(),
-                }
-                for b in bodies
-            ]
-        }
+        self._ctrl.set_playing(False)
+        with self._sim._lock:
+            bodies = self._sim.system.bodies
+            data = {
+                "bodies": [
+                    {
+                        "name": b.name, "mass_kg": b.mass, "radius_km": b.radius,
+                        "color": list(b.color),
+                        "pos_au": b.pos.tolist(),
+                        "vel_au_per_day": b.vel.tolist(),
+                    }
+                    for b in bodies
+                ]
+            }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         self.statusBar().showMessage(f"Saved {len(bodies)} bodies to {Path(path).name}")
         if was_playing:
             self._sim.resume()
+            self._ctrl.set_playing(True)
 
     def _load_from_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Load System", "", "JSON (*.json)")

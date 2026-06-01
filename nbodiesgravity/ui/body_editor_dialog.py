@@ -27,6 +27,7 @@ class BodyEditorDialog(QDialog):
         super().__init__(parent)
         self._existing_names = existing_names
         self._edit_mode = body is not None
+        self._original_name = body.name if body else None
         self._template_bodies: dict[str, CelestialBody] = (
             {b.name: b for b in template_bodies} if template_bodies else {}
         )
@@ -66,7 +67,7 @@ class BodyEditorDialog(QDialog):
         self._mass_spin = _sci_spin(1e-3, 2e30, body.mass if body else 1e22)
         self._mass_spin.valueChanged.connect(self._validate)
 
-        if not self._edit_mode and self._template_bodies:
+        if self._template_bodies:
             self._mass_mode_combo = QComboBox()
             self._mass_mode_combo.addItems(["Manual", "Template * Multiplier"])
             self._mass_mode_combo.currentTextChanged.connect(self._on_mass_mode_changed)
@@ -102,7 +103,7 @@ class BodyEditorDialog(QDialog):
         self._radius_spin = _sci_spin(0.1, 1e7, body.radius if body else 1000.0)
         self._radius_spin.valueChanged.connect(self._validate)
 
-        if not self._edit_mode and self._template_bodies:
+        if self._template_bodies:
             self._radius_mode_combo = QComboBox()
             self._radius_mode_combo.addItems(["Manual", "Template * Multiplier"])
             self._radius_mode_combo.currentTextChanged.connect(self._on_radius_mode_changed)
@@ -150,8 +151,11 @@ class BodyEditorDialog(QDialog):
         self._px = _au_spin(pos[0])
         self._py = _au_spin(pos[1])
         self._pz = _au_spin(pos[2])
+        self._px.valueChanged.connect(self._validate)
+        self._py.valueChanged.connect(self._validate)
+        self._pz.valueChanged.connect(self._validate)
 
-        if not self._edit_mode and self._template_bodies:
+        if self._template_bodies:
             self._pos_mode_combo = QComboBox()
             self._pos_mode_combo.addItems(["Manual", "From Template", "Average of Two"])
             self._pos_mode_combo.currentTextChanged.connect(self._on_pos_mode_changed)
@@ -202,7 +206,7 @@ class BodyEditorDialog(QDialog):
         self._vy = _au_spin(vel[1])
         self._vz = _au_spin(vel[2])
 
-        if not self._edit_mode and self._template_bodies:
+        if self._template_bodies:
             self._vel_mode_combo = QComboBox()
             self._vel_mode_combo.addItems(["Manual", "From Template", "Average of Two"])
             self._vel_mode_combo.currentTextChanged.connect(self._on_vel_mode_changed)
@@ -283,6 +287,17 @@ class BodyEditorDialog(QDialog):
             err = "Mass must be > 0."
         elif self._radius_spin.value() <= 0:
             err = "Radius must be > 0."
+        else:
+            px_val = self._px.value()
+            py_val = self._py.value()
+            pz_val = self._pz.value()
+            for other_name, other_body in self._template_bodies.items():
+                # Skip checking against the body's original name when editing
+                if self._edit_mode and other_name == self._original_name:
+                    continue
+                if np.allclose(other_body.pos, [px_val, py_val, pz_val], atol=1e-9):
+                    err = f"Position overlaps with '{other_name}'."
+                    break
         self._err.setText(err)
         self._btns.button(QDialogButtonBox.StandardButton.Ok).setEnabled(err == "")
 
@@ -349,6 +364,7 @@ class BodyEditorDialog(QDialog):
                 self._px.setValue(float(avg_pos[0]))
                 self._py.setValue(float(avg_pos[1]))
                 self._pz.setValue(float(avg_pos[2]))
+        self._validate()
 
     # ---- Velocity template slots ----
     def _on_vel_mode_changed(self, text: str) -> None:
