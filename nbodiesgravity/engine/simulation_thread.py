@@ -35,7 +35,7 @@ class SimulationThread(QThread):
         self._system = system
         self._timescale: float = 1.0   # simulated days per real second
         self._paused: bool = True
-        self._running: bool = False
+        self._running: bool = True
         self._lock = threading.Lock()
         self.latest_snapshot: list[BodyState] = system.snapshot()
         self._elapsed_days: float = 0.0
@@ -79,7 +79,6 @@ class SimulationThread(QThread):
         self.wait()
 
     def run(self) -> None:
-        self._running = True
         t_prev = time.perf_counter()
         while self._running:
             if self._paused:
@@ -105,7 +104,7 @@ class SimulationThread(QThread):
             self.latest_snapshot = snap
             self.snapshot_ready.emit(snap)
 
-            if any(float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
+            if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() or float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True
                 self.blow_up_detected.emit()
 
