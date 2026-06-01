@@ -30,6 +30,8 @@ class SolarSystem:
                 color=b.color,
                 show_trail=b.show_trail,
                 active=b.active,
+                label=b.label,
+                show_name=b.show_name,
             )
             for b in self._bodies
         ]
@@ -73,8 +75,8 @@ class SolarSystem:
             
             min_t_orb = np.nanmin(t_orb)
             if np.isfinite(min_t_orb):
-                # Target ~100 steps per orbit (0.01 * T) capped at 1.0 day max
-                max_step = min(1.0, 0.01 * min_t_orb)
+                # Target ~100 steps per orbit (0.01 * T) capped at 1.0 day max, with a floor of 1e-5 to prevent infinite loops
+                max_step = max(1e-5, min(1.0, 0.01 * min_t_orb))
 
         remaining = dt
         while remaining > 0:

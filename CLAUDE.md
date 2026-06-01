@@ -32,7 +32,7 @@ Stack is Python 3.12, PyQt6, PyOpenGL, NumPy. Do not introduce new Python depend
 N-body gravitational simulation desktop application. A background QThread runs the physics loop; the render thread reads position snapshots via a GIL-safe reference swap. The UI is PyQt6. The viewport is a `QOpenGLWidget` using OpenGL 3.3 Core Profile.
 
 **Run:** `conda run -n nbodiesgravity python nbodiesgravity/main.py`
-**Tests:** `conda run -n nbodiesgravity pytest tests/ -v` — 37 tests, all must pass.
+**Tests:** `conda run -n nbodiesgravity pytest tests/ -v` — 70 tests, all must pass.
 
 ---
 
@@ -63,7 +63,7 @@ UI thread (Qt main thread)
 └── DateLoaderWorker    — QThread, JPL fetch, emits body_loaded / finished / error
 
 Physics thread
-└── SimulationThread    — QThread, 120 steps/s Velocity Verlet
+└── SimulationThread    — QThread, up to 500 steps/s adaptive Velocity Verlet
         └── SolarSystem — owns list[CelestialBody], step(), snapshot()
 ```
 
@@ -80,8 +80,8 @@ Physics thread
 
 ### `engine/body.py`
 
-- `BodyState(NamedTuple)` — immutable kinematic snapshot: `name, pos, vel` (AU, AU/day).
-- `CelestialBody(dataclass)` — mutable physics body: `name, mass, pos, vel, radius, color, show_trail`.
+- `BodyState(NamedTuple)` — immutable kinematic snapshot: `name, pos, vel, active` (AU, AU/day). `active=False` bodies are invisible and excluded from the integrator.
+- `CelestialBody(dataclass)` — mutable physics body: `name, mass, pos, vel, radius, color, show_trail, active, label, show_name`. `label` is one of `"star"`, `"planet"`, `"moon"`, `"dwarf planet"`, `"asteroid"` (default `"planet"`). `show_name` controls in-viewport label visibility (default `True`).
 - `CelestialBody.snapshot()` → `BodyState` (copies arrays).
 
 ### `engine/integrator.py`
@@ -91,16 +91,22 @@ Physics thread
 ### `engine/system.py`
 
 - `SolarSystem` — holds `list[CelestialBody]`, delegates to integrator.
-- `step(dt)`, `snapshot() → list[BodyState]`, `add_body`, `remove_body`, `get_body`.
+- `clone() → SolarSystem` — deep-copies all bodies (including `label`, `show_name`, `active`). Used by restart and initial-state tracking.
+- `step(dt)` — advances only active bodies. Computes adaptive `max_step` from the minimum pairwise orbital timescale: `max_step = max(1e-5, min(1.0, 0.01 * min_t_orb))`. Sub-steps `dt` in chunks of at most `max_step` to maintain accuracy for tight orbits.
+- `snapshot() → list[BodyState]`, `add_body`, `remove_body`, `get_body`.
 
 ### `engine/simulation_thread.py`
 
-- `SimulationThread(QThread)` — runs `system.step(dt)` at 120 steps/s.
-- `_timescale: float` — simulated days per real second (default 1.0).
-- `_elapsed_days: float` — accumulated simulated days since last load. GIL-safe.
+- `SimulationThread(QThread)` — drives `system.step(dt)` targeting `_TARGET_HZ = 500` real-time iterations/s; actual physics step is adaptive (see `system.py`). Real-dt capped at 50 ms to prevent spiral-of-death.
+- `_timescale: float` — simulated days per real second (default 1.0); minimum enforced at `1e-3` by `set_timescale`.
+- `_elapsed_days: float` — accumulated simulated days since last system load. GIL-safe float.
 - `elapsed_days` property — read from any thread.
+- `is_playing` property — `True` when not paused.
+- `system` property — read-only access to `_system`.
 - `set_timescale(days_per_second)`, `pause()`, `resume()`, `reset(system)`, `stop_thread()`.
+- `refresh_snapshot()` — forces a snapshot refresh from the current system state while paused (used after body edits to update `latest_snapshot` before the thread resumes).
 - `reset(system)` zeroes `_elapsed_days`.
+- Blow-up detection checks only **active** bodies for NaN/inf positions or distance > 1000 AU.
 - Signals: `snapshot_ready(list[BodyState])`, `blow_up_detected()`.
 
 ### `data/cache.py`
@@ -163,17 +169,21 @@ Physics thread
 
 ### `ui/body_list_panel.py`
 
-- Signals: `body_selected(str)`, `body_edit_requested(str)`, `trail_toggled(str, bool)`.
-- `populate(bodies)` — rebuilds list rows.
+- Signals: `body_selected(str)`, `body_edit_requested(str)`, `trail_toggled(str, bool)`, `body_active_toggled(str, bool)`, `all_bodies_set(bool)`, `all_trails_set(bool)`, `category_active_toggled(str, bool)`, `category_trail_toggled(str, bool)`, `category_name_toggled(str, bool)`.
+- `populate(bodies)` — rebuilds list rows; also rebuilds per-category header rows with bulk-toggle checkboxes.
+- `_category_widgets` dict — keyed by label string, each value is `{"active": QCheckBox, "trail": QCheckBox, "name": QCheckBox}`. Used in tests to verify checkbox state after operations.
 
 ### `ui/body_editor_dialog.py`
 
 - `BodyEditorDialog(existing_names, body=None, template_bodies=None, parent=None)`.
-- Edit mode (`body` provided): no template selector shown.
-- Add mode: template combo with "Blank" / body names / "Average of two…" (latter only if ≥2 template bodies).
-- `result_body() → CelestialBody` — call after `exec()` returns Accepted.
-- Helper methods: `_on_template_changed`, `_on_avg_selection_changed`, `_clear_fields`, `_fill_from_body`, `_fill_from_average`.
-- `_validate()` called explicitly at end of every fill method and connected to field signals.
+- Edit mode (`body` provided) and Add mode both show template-based fields when `template_bodies` is non-empty.
+- Fields: **Name**, **Label** (combo: star/planet/moon/dwarf planet/asteroid), **Mass**, **Radius**, **Color**, **Position X/Y/Z**, **Velocity VX/VY/VZ**.
+- When `template_bodies` is provided, each of Mass, Radius, Position, and Velocity gains a **Mode** combo:
+  - Mass/Radius modes: `"Manual"` | `"Template * Multiplier"` — picks a template body and a float multiplier, auto-computes the value.
+  - Position/Velocity modes: `"Manual"` | `"From Template"` | `"Average of Two"` — copies or averages from up to two template bodies.
+- **Position overlap validation**: `_validate()` checks that the entered position does not match any template body's position (within `1e-9` AU, skipping the body's own original position in edit mode). OK button disabled while the error label is non-empty.
+- `result_body() → CelestialBody` — call after `exec()` returns Accepted; includes `label` field.
+- `_validate()` is called at the end of every template-fill slot and connected to all field-change signals.
 
 ### `ui/date_loader_worker.py`
 
@@ -183,9 +193,16 @@ Physics thread
 ### `ui/main_window.py`
 
 - `MainWindow` — assembles all panels, wires all signals.
-- `_load_system(system)`: clears trails → resets date label → starts timer → starts sim thread (in that order — `clear_trails()` must precede `_sim.start()` to avoid race).
+- `_initial_system: SolarSystem | None` — clone of the system captured at each non-restart load; used by `_on_restart()` to restore epoch state.
+- `_initial_epoch: datetime` — epoch captured alongside `_initial_system`.
+- `_load_system(system, is_restart=False)`: clears trails → resets date label → starts timer → starts sim thread. When `is_restart=False` (default), captures `_initial_system = system.clone()` and `_initial_epoch`. When `is_restart=True`, skips the clone so the initial-state snapshot is preserved.
+- `_on_restart()` — restores `_initial_system.clone()` at `_initial_epoch` without re-cloning the initial snapshot.
 - `_date_timer` (QTimer, 250 ms) → `_update_sim_date()` → `_ctrl.set_sim_date(...)`.
-- Center change and `body_selected` both wire to `lambda _: self._gl.clear_trails()`.
+- `_on_body_active_toggled(name, active)` — toggles `body.active` under lock; if the camera was following the deactivated body, falls back to the next active body.
+- `_on_all_bodies_set(active)` / `_on_all_trails_set(enabled)` — bulk-set all bodies; camera resets to Sun when all deactivated.
+- `_on_category_active_toggled(label, active)` / `_on_category_trail_toggled` / `_on_category_name_toggled` — per-category bulk operations.
+- `_refresh_after_body_change()` — rebuilds `display_infos`, repopulates list and center combo, updates `latest_snapshot`. Called after any add/edit/remove body operation.
+- `_save_to_file()` / `_load_from_file()` — JSON save/load of body state via `QFileDialog`.
 - `closeEvent`: stops `_date_timer` before `_sim.stop_thread()`.
 
 ---
@@ -200,10 +217,18 @@ Physics thread
 | `_ctrl` | `center_changed` | `lambda _: _gl.clear_trails()` |
 | `_ctrl` | `play_toggled` | `_on_play_toggled` |
 | `_ctrl` | `clear_trails_requested` | `_gl.clear_trails` |
-| `_body_list` | `body_selected` | `_gl.camera.set_center` |
-| `_body_list` | `body_selected` | `lambda _: _gl.clear_trails()` |
+| `_ctrl` | `show_names_toggled` | `_on_show_names_toggled_from_ctrl` |
+| `_ctrl` | `restart_requested` | `_on_restart` |
+| `_ctrl` | `top_view_requested` | `_on_top_view` |
+| `_body_list` | `body_selected` | `_on_body_selected` (focus camera + update) |
 | `_body_list` | `body_edit_requested` | `_edit_body` |
 | `_body_list` | `trail_toggled` | `_on_trail_toggled` |
+| `_body_list` | `body_active_toggled` | `_on_body_active_toggled` |
+| `_body_list` | `all_bodies_set` | `_on_all_bodies_set` |
+| `_body_list` | `all_trails_set` | `_on_all_trails_set` |
+| `_body_list` | `category_active_toggled` | `_on_category_active_toggled` |
+| `_body_list` | `category_trail_toggled` | `_on_category_trail_toggled` |
+| `_body_list` | `category_name_toggled` | `_on_category_name_toggled` |
 | `_sim` | `blow_up_detected` | `_on_blow_up` |
 | `_date_timer` | `timeout` | `_update_sim_date` |
 
@@ -217,6 +242,9 @@ Physics thread
 4. **`elapsed_days` resets automatically**: `_load_system` always creates a fresh `SimulationThread`, so `_elapsed_days` starts at 0. `reset(system)` also explicitly zeroes it.
 5. **Log-scale speed**: slider maps to `10^(LOG_MIN + t*(LOG_MAX-LOG_MIN))` days/s. `timescale_changed` always emits float days/s.
 6. **Body display size**: physical log-scaled base `[0.0003, 0.003]` AU, floored at `camera.distance * 0.008`. Moons become visible outside parent planets when `camera.distance ≲ 0.1 AU`.
+7. **Adaptive physics sub-stepping**: `SolarSystem.step()` computes the minimum pairwise orbital timescale each call and targets ~100 steps per orbit (`max_step = 0.01 * min_t_orb`, clamped `[1e-5, 1.0]` days). Prevents numerical blow-up for tight orbits (moons, close-approach bodies) without a hard-coded step size.
+8. **Restart preserves modifications**: `_initial_system` is cloned at every non-restart `_load_system`. Add/edit/remove body operations also update `_initial_system` under `_sim._lock` so restart reproduces the user's manual modifications at the original epoch.
+9. **Category controls propagate to initial system**: all per-category bulk operations (`active`, `trail`, `show_name`) mirror their mutations into `_initial_system` so restart is consistent.
 
 ---
 
@@ -238,15 +266,16 @@ Physics thread
 conda run -n nbodiesgravity pytest tests/ -v
 ```
 
-37 tests across:
+70 tests across:
 
-- `tests/engine/` — integrator energy conservation, system operations, `simulation_thread` property.
+- `tests/engine/` — integrator energy conservation, system operations, `simulation_thread` property, adaptive sub-stepping (same-position no-infinite-loop), system cloning.
 - `tests/data/` — cache, Horizons client (mocked with `responses`), loader.
-- `tests/rendering/` — `TrailBuffer` relative append, reset, ring-wrap.
+- `tests/rendering/` — `TrailBuffer` relative append, reset, ring-wrap; camera; name projection.
+- `tests/ui/` — body editor templates and overlap validation; category toggling; interactive body add/edit/remove (thread-safety); restart preserves modifications; blow-up detection.
 
 `tests/conftest.py` provides a session-scoped `QApplication` fixture required for any `QThread` instantiation.
 
-UI behaviour (dialogs, rendering) is verified manually — Qt widget testing requires a display.
+UI tests mock OpenGL via monkeypatching (`GLWidget.initializeGL`, `resizeGL`, `paintGL`, `paintEvent` are all replaced with no-ops) to allow headless execution without a display.
 
 ---
 
@@ -278,6 +307,7 @@ Feature branches use git worktrees (`.worktrees/` — gitignored).
 - **Do not call `TrailBuffer.initialize()` outside `paintGL`.** The GL context is not current. `_vao` will be set to a garbage integer, bypassing `draw()`'s `None` guard and silently producing no output.
 - **Do not call `_sim.start()` before `_gl.clear_trails()` in `_load_system`.** The physics thread may write trail points between `start()` and a subsequent `clear_trails()`.
 - **Do not add new dependencies without updating `environment.yml`.**
-- **`BodyListPanel.populate()` may emit `body_selected` on programmatic selection.** Wiring that signal to `clear_trails()` means trails clear on every `populate()` — currently harmless since buffers are empty at that point, but be aware of this if that invariant ever changes.
+- **`BodyListPanel.populate()` may emit `body_selected` on programmatic selection.** `body_selected` is no longer wired to `clear_trails()` directly; it goes to `_on_body_selected` which focuses the camera. Still, be aware that any signal-to-clear-trails wiring on populate would clear on every rebuild.
+- **Always mirror body mutations into `_initial_system`.** Every add/edit/remove/toggle operation must duplicate the change into `_initial_system` (under `_sim._lock`) so that `_on_restart()` produces a consistent result.
 - **Do not read `SimulationThread._elapsed_days` with a lock.** It is GIL-safe; adding a lock here is incorrect and risks deadlock if called from the physics thread indirectly.
 - **`closeEvent` order matters.** Stop `_date_timer` before `_sim.stop_thread()`. Reversing this risks the timer firing after the thread has stopped and `latest_snapshot` is stale or None.
