@@ -1,3 +1,5 @@
+import time as _time
+
 import numpy as np
 import pytest
 from nbodiesgravity.engine.body import CelestialBody
@@ -28,7 +30,6 @@ def test_elapsed_days_property_reflects_internal_state(qapp):
 
 def test_elapsed_days_tracks_real_time(qapp):
     """Simulation must advance at ~timescale days per real second, not faster."""
-    import time as _time
     thread = SimulationThread(_one_body_system())
     thread.set_timescale(1.0)   # 1 simulated day per real second
     thread.resume()
@@ -62,14 +63,7 @@ def test_refresh_snapshot_updates_latest_snapshot(qapp):
     assert thread.latest_snapshot[1].name == "Mars"
 
 
-import time as _time
-
-
 def test_collisions_detected_signal_emitted(qapp):
-    from nbodiesgravity.engine.body import CelestialBody
-    from nbodiesgravity.engine.system import SolarSystem
-    from nbodiesgravity.engine.simulation_thread import SimulationThread
-
     a = CelestialBody("A", 2.0e30, np.zeros(3), np.zeros(3), 695700.0, (1.0, 1.0, 1.0))
     b = CelestialBody("B", 1.0e24, np.array([1e-4, 0.0, 0.0]), np.zeros(3), 6371.0, (0.0, 0.0, 1.0))
     system = SolarSystem([a, b])
