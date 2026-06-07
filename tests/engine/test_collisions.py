@@ -71,9 +71,10 @@ def test_non_overlapping_pair_untouched():
 
 def test_chained_three_body_merge_in_one_call():
     # All three within the Sun-sized radius of A => chain to a single survivor.
-    a = _big("A", 3.0e30, [0.0, 0.0, 0.0], radius=695700.0)
-    b = _big("B", 2.0e30, [1e-4, 0.0, 0.0], radius=695700.0)
-    c = _big("C", 1.0e30, [2e-4, 0.0, 0.0], radius=695700.0)
+    a = _big("A", 3.0e30, [0.0, 0.0, 0.0], vel=[0.1, 0.0, 0.0], radius=695700.0)
+    b = _big("B", 2.0e30, [1e-4, 0.0, 0.0], vel=[0.0, 0.2, 0.0], radius=695700.0)
+    c = _big("C", 1.0e30, [2e-4, 0.0, 0.0], vel=[0.0, 0.0, 0.3], radius=695700.0)
+    p_before = a.mass * a.vel + b.mass * b.vel + c.mass * c.vel
     system = SolarSystem([a, b, c])
 
     events = system._resolve_collisions()
@@ -82,6 +83,9 @@ def test_chained_three_body_merge_in_one_call():
     assert len(system.bodies) == 1
     assert system.bodies[0].name == "A"
     assert system.bodies[0].mass == pytest.approx(6.0e30)
+    # Total momentum is conserved across the full chain of merges.
+    survivor = system.bodies[0]
+    np.testing.assert_allclose(survivor.mass * survivor.vel, p_before, rtol=1e-12)
 
 
 def test_inactive_bodies_excluded_from_collision():
