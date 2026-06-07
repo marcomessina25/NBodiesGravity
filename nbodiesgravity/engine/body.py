@@ -16,6 +16,12 @@ class BodyState(NamedTuple):
     active: bool = True   # False = excluded from integrator, invisible in render
 
 
+class CollisionEvent(NamedTuple):
+    """Record of one merge: `absorbed` was removed into `survivor`."""
+    absorbed: str   # name of the body that was removed
+    survivor: str   # name of the body that absorbed it
+
+
 @dataclass
 class CelestialBody:
     """A gravitationally interacting body.
