@@ -141,3 +141,37 @@ def test_on_collisions_retargets_camera_and_refreshes(qapp):
     finally:
         window._date_timer.stop()
         window._sim.stop_thread()
+
+
+def test_on_collisions_follows_chain_to_final_survivor(qapp):
+    from nbodiesgravity.engine.body import CollisionEvent
+
+    a = CelestialBody("A", 3.0e30, np.zeros(3), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    b = CelestialBody("B", 2.0e30, np.array([1.0, 0.0, 0.0]), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    c = CelestialBody("C", 1.0e30, np.array([2.0, 0.0, 0.0]), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    system = SolarSystem([a, b, c])
+
+    window = MainWindow()
+    window._load_system(system)
+    try:
+        window._gl.camera.set_center("C")
+
+        # Simulate a chained merge already performed by the physics layer:
+        # C absorbed into B, then B absorbed into A. Only A remains.
+        with window._sim._lock:
+            window._sim.system.remove_body("C")
+            window._sim.system.remove_body("B")
+
+        events = [
+            CollisionEvent(absorbed="C", survivor="B"),
+            CollisionEvent(absorbed="B", survivor="A"),
+        ]
+        window._on_collisions(events)
+
+        # Camera followed the chain C -> B -> A, landing on the final survivor.
+        assert window._gl.camera.center_name == "A"
+        names = [bd.name for bd in window._sim.system.bodies]
+        assert names == ["A"]
+    finally:
+        window._date_timer.stop()
+        window._sim.stop_thread()

@@ -562,12 +562,17 @@ class MainWindow(QMainWindow):
         if self._sim is None:
             return
         center = self._gl.camera.center_name
+        new_center = center
         for ev in events:
-            if ev.absorbed == center:
-                self._gl.camera.set_center(ev.survivor)
-                self._ctrl.set_center_name(ev.survivor)
-                self._gl.clear_trails()
-                break
+            # Follow the chain: a survivor of an earlier merge can be absorbed by
+            # a later one within the same batch. Resolve to the final survivor so
+            # the camera never lands on a body that was itself absorbed.
+            if ev.absorbed == new_center:
+                new_center = ev.survivor
+        if new_center != center:
+            self._gl.camera.set_center(new_center)
+            self._ctrl.set_center_name(new_center)
+            self._gl.clear_trails()
         self._refresh_after_body_change()
 
     def _update_sim_date(self) -> None:
