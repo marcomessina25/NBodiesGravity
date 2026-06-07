@@ -114,3 +114,18 @@ def test_step_returns_empty_list_when_no_collision():
     system = SolarSystem([a, b])
 
     assert system.step(0.001) == []
+
+
+def test_equal_mass_tie_break_keeps_alphabetically_first_name():
+    # Equal mass => survivor is the alphabetically-first name ("A" < "Z").
+    z = _big("Z", 1.0e30, [0.0, 0.0, 0.0], radius=695700.0)
+    a = _big("A", 1.0e30, [1e-4, 0.0, 0.0], radius=695700.0)
+    system = SolarSystem([z, a])
+
+    events = system._resolve_collisions()
+
+    assert len(events) == 1
+    assert events[0].survivor == "A"
+    assert events[0].absorbed == "Z"
+    assert len(system.bodies) == 1
+    assert system.bodies[0].name == "A"

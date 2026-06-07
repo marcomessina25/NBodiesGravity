@@ -113,6 +113,9 @@ class SolarSystem:
             for i in range(len(active)):
                 for j in range(i + 1, len(active)):
                     bi, bj = active[i], active[j]
+                    # NaN/inf positions (blown-up bodies) are intentionally not handled here:
+                    # a NaN distance makes `dist < threshold` False, so they are silently skipped.
+                    # Blow-up is detected and reported separately by SimulationThread.blow_up_detected.
                     dist = float(np.linalg.norm(bi.pos - bj.pos))
                     threshold = (bi.radius + bj.radius) / KM_PER_AU
                     if dist < threshold and (closest is None or dist < closest[0]):
