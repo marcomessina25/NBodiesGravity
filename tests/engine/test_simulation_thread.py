@@ -61,3 +61,34 @@ def test_refresh_snapshot_updates_latest_snapshot(qapp):
     assert len(thread.latest_snapshot) == 2
     assert thread.latest_snapshot[1].name == "Mars"
 
+
+import time as _time
+
+
+def test_collisions_detected_signal_emitted(qapp):
+    from nbodiesgravity.engine.body import CelestialBody
+    from nbodiesgravity.engine.system import SolarSystem
+    from nbodiesgravity.engine.simulation_thread import SimulationThread
+
+    a = CelestialBody("A", 2.0e30, np.zeros(3), np.zeros(3), 695700.0, (1.0, 1.0, 1.0))
+    b = CelestialBody("B", 1.0e24, np.array([1e-4, 0.0, 0.0]), np.zeros(3), 6371.0, (0.0, 0.0, 1.0))
+    system = SolarSystem([a, b])
+
+    thread = SimulationThread(system)
+    recorded: list = []
+    thread.collisions_detected.connect(lambda evs: recorded.extend(evs))
+    thread.set_timescale(1.0)
+    thread.resume()
+    thread.start()
+    try:
+        deadline = _time.time() + 5.0
+        while not recorded and _time.time() < deadline:
+            qapp.processEvents()
+            _time.sleep(0.01)
+    finally:
+        thread.stop_thread()
+
+    assert recorded, "collisions_detected was not emitted"
+    assert recorded[0].absorbed == "B"
+    assert recorded[0].survivor == "A"
+
