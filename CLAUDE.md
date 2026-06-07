@@ -83,6 +83,7 @@ Physics thread
 - `BodyState(NamedTuple)` — immutable kinematic snapshot: `name, pos, vel, active` (AU, AU/day). `active=False` bodies are invisible and excluded from the integrator.
 - `CelestialBody(dataclass)` — mutable physics body: `name, mass, pos, vel, radius, color, show_trail, active, label, show_name`. `label` is one of `"star"`, `"planet"`, `"moon"`, `"dwarf planet"`, `"asteroid"` (default `"planet"`). `show_name` controls in-viewport label visibility (default `True`).
 - `CelestialBody.snapshot()` → `BodyState` (copies arrays).
+- `CollisionEvent(NamedTuple)` — `absorbed, survivor` (body names). Returned by `SolarSystem.step()` when a merge occurs.
 
 ### `engine/integrator.py`
 
@@ -92,7 +93,8 @@ Physics thread
 
 - `SolarSystem` — holds `list[CelestialBody]`, delegates to integrator.
 - `clone() → SolarSystem` — deep-copies all bodies (including `label`, `show_name`, `active`). Used by restart and initial-state tracking.
-- `step(dt)` — advances only active bodies. Computes adaptive `max_step` from the minimum pairwise orbital timescale: `max_step = max(1e-5, min(1.0, 0.01 * min_t_orb))`. Sub-steps `dt` in chunks of at most `max_step` to maintain accuracy for tight orbits.
+- `step(dt) → list[CollisionEvent]` — advances only active bodies. Computes adaptive `max_step` from the minimum pairwise orbital timescale: `max_step = max(1e-5, min(1.0, 0.01 * min_t_orb))`. Sub-steps `dt` in chunks of at most `max_step` to maintain accuracy for tight orbits. Returns list of collision events (empty if none).
+- `_resolve_collisions() → list[CollisionEvent]` — merges active bodies whose centres come within the sum of their physical radii (`KM_PER_AU = 1.495978707e8` converts km radii to AU). Survivor = larger mass (ties broken by alphabetically-first name); momentum conserved (`v = (mₛvₛ + mₐvₐ)/(mₛ+mₐ)`), mass summed, radius grows by equal-density volume (`r = (rₛ³ + rₐ³)^⅓`). Loops until no overlap remains so chains collapse in one call. Always on.
 - `snapshot() → list[BodyState]`, `add_body`, `remove_body`, `get_body`.
 
 ### `engine/simulation_thread.py`
@@ -107,7 +109,7 @@ Physics thread
 - `refresh_snapshot()` — forces a snapshot refresh from the current system state while paused (used after body edits to update `latest_snapshot` before the thread resumes).
 - `reset(system)` zeroes `_elapsed_days`.
 - Blow-up detection checks only **active** bodies for NaN/inf positions or distance > 1000 AU.
-- Signals: `snapshot_ready(list[BodyState])`, `blow_up_detected()`.
+- Signals: `snapshot_ready(list[BodyState])`, `blow_up_detected()`, `collisions_detected(list[CollisionEvent])`.
 
 ### `data/cache.py`
 
@@ -202,6 +204,7 @@ Physics thread
 - `_on_all_bodies_set(active)` / `_on_all_trails_set(enabled)` — bulk-set all bodies; camera resets to Sun when all deactivated.
 - `_on_category_active_toggled(label, active)` / `_on_category_trail_toggled` / `_on_category_name_toggled` — per-category bulk operations.
 - `_refresh_after_body_change()` — rebuilds `display_infos`, repopulates list and center combo, updates `latest_snapshot`. Called after any add/edit/remove body operation.
+- `_on_collisions(events)` — on merges from the physics thread: follows the collision chain to the final survivor and retargets the camera if it was following an absorbed body, then calls `_refresh_after_body_change()`. Not mirrored into `_initial_system` — Restart restores the pre-collision epoch state.
 - `_save_to_file()` / `_load_from_file()` — JSON save/load of body state via `QFileDialog`.
 - `closeEvent`: stops `_date_timer` before `_sim.stop_thread()`.
 
@@ -230,6 +233,7 @@ Physics thread
 | `_body_list` | `category_trail_toggled` | `_on_category_trail_toggled` |
 | `_body_list` | `category_name_toggled` | `_on_category_name_toggled` |
 | `_sim` | `blow_up_detected` | `_on_blow_up` |
+| `_sim` | `collisions_detected` | `_on_collisions` |
 | `_date_timer` | `timeout` | `_update_sim_date` |
 
 ---
@@ -311,3 +315,4 @@ Feature branches use git worktrees (`.worktrees/` — gitignored).
 - **Always mirror body mutations into `_initial_system`.** Every add/edit/remove/toggle operation must duplicate the change into `_initial_system` (under `_sim._lock`) so that `_on_restart()` produces a consistent result.
 - **Do not read `SimulationThread._elapsed_days` with a lock.** It is GIL-safe; adding a lock here is incorrect and risks deadlock if called from the physics thread indirectly.
 - **`closeEvent` order matters.** Stop `_date_timer` before `_sim.stop_thread()`. Reversing this risks the timer firing after the thread has stopped and `latest_snapshot` is stale or None.
+- **Collision detection is per-step, not continuous.** Fast, small bodies can tunnel through each other between `step()` calls without registering a collision. Realistic collisions (into the Sun, or user-placed near-overlapping bodies) are caught. Continuous collision detection is out of scope.
