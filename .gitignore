@@ -23,7 +23,8 @@ build/
 .nbodiesgravity/
 
 # Debug / scratch text output
-*.txt
+debug_*.txt
+*_output.txt
 
 # OS
 .DS_Store
