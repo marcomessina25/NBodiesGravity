@@ -22,8 +22,8 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 - **39 standard bodies included**:
   - **Stars**: Sun.
   - **Planets**: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.
-  - **Moons**: Moon, Io, Europa, Ganymede, Callisto, Titan, Triton, Charon, Titania, Rhea, Oberon, Iapetus, Umbriel, Ariel, Dione, Enceladus, Mimas, Miranda.
-  - **Dwarf Planets**: Pluto, Eris, Ceres, Haumea, Makemake, Gonggong, Quaoar, Tethys, Sedna, Orcus, Vauna.
+  - **Moons**: Moon, Io, Europa, Ganymede, Callisto, Titan, Triton, Charon, Titania, Rhea, Oberon, Iapetus, Umbriel, Ariel, Dione, Enceladus, Mimas, Miranda, Tethys.
+  - **Dwarf Planets**: Pluto, Eris, Ceres, Haumea, Makemake, Gonggong, Quaoar, Sedna, Orcus, Vauna.
   - **Asteroids**: Vesta.
 - **JPL Horizons integration**: fetch real NASA state vectors for any date via the REST API.
 - **Local JSON cache** for Horizons results — repeated fetches for the same date are instant.

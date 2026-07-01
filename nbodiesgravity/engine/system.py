@@ -1,7 +1,10 @@
 from __future__ import annotations
 import numpy as np
-from .body import CelestialBody, BodyState
+from .body import CelestialBody, BodyState, CollisionEvent
 from .integrator import VelocityVerletIntegrator
+
+#: Kilometres per Astronomical Unit — converts km radii to AU for collision tests.
+KM_PER_AU: float = 1.495978707e8
 
 
 class SolarSystem:
@@ -42,15 +45,17 @@ class SolarSystem:
         """Shallow copy — callers cannot mutate the internal list."""
         return list(self._bodies)
 
-    def step(self, dt: float) -> None:
+    def step(self, dt: float) -> list[CollisionEvent]:
         """Advance all *active* bodies by dt days using Velocity Verlet.
 
         Handles high-velocity / tight orbits (like moons) by dynamically
         sub-stepping the integration step to maintain accuracy.
+
+        Returns a list of CollisionEvent for any merges that occurred.
         """
         active = [b for b in self._bodies if b.active]
         if not active:
-            return
+            return []
 
         positions  = np.array([b.pos for b in active])
         velocities = np.array([b.vel for b in active])
@@ -87,6 +92,55 @@ class SolarSystem:
         for i, body in enumerate(active):
             body.pos = positions[i]
             body.vel = velocities[i]
+
+        return self._resolve_collisions()
+
+    def _resolve_collisions(self) -> list[CollisionEvent]:
+        """Merge any active bodies whose centres overlap (sum of physical radii).
+
+        Survivor = larger mass (ties broken by the alphabetically-first name).
+        Momentum is conserved; the survivor's radius grows by equal-density
+        volume. Loops until no overlapping pair remains so chains collapse in a
+        single call. Returns one CollisionEvent per merge performed.
+        """
+        events: list[CollisionEvent] = []
+        while True:
+            active = [b for b in self._bodies if b.active]
+            if len(active) < 2:
+                break
+
+            closest = None   # (dist, body_i, body_j)
+            for i in range(len(active)):
+                for j in range(i + 1, len(active)):
+                    bi, bj = active[i], active[j]
+                    # NaN/inf positions (blown-up bodies) are intentionally not handled here:
+                    # a NaN distance makes `dist < threshold` False, so they are silently skipped.
+                    # Blow-up is detected and reported separately by SimulationThread.blow_up_detected.
+                    dist = float(np.linalg.norm(bi.pos - bj.pos))
+                    threshold = (bi.radius + bj.radius) / KM_PER_AU
+                    if dist < threshold and (closest is None or dist < closest[0]):
+                        closest = (dist, bi, bj)
+
+            if closest is None:
+                break
+
+            _, ba, bb = closest
+            if ba.mass > bb.mass or (ba.mass == bb.mass and ba.name < bb.name):
+                survivor, absorbed = ba, bb
+            else:
+                survivor, absorbed = bb, ba
+
+            total_mass = survivor.mass + absorbed.mass
+            survivor.vel = (
+                survivor.mass * survivor.vel + absorbed.mass * absorbed.vel
+            ) / total_mass
+            survivor.radius = (survivor.radius ** 3 + absorbed.radius ** 3) ** (1.0 / 3.0)
+            survivor.mass = total_mass
+
+            self._bodies = [b for b in self._bodies if b is not absorbed]
+            events.append(CollisionEvent(absorbed=absorbed.name, survivor=survivor.name))
+
+        return events
 
     def snapshot(self) -> list[BodyState]:
         """Return a thread-safe copy of all body states."""

@@ -22,6 +22,10 @@ build/
 # Local cache
 .nbodiesgravity/
 
+# Debug / scratch text output
+debug_*.txt
+*_output.txt
+
 # OS
 .DS_Store
 Thumbs.db

@@ -112,3 +112,66 @@ def test_nan_and_inf_trigger_blow_up(qapp):
     
     # Clean up
     thread.stop_thread()
+
+
+def test_on_collisions_retargets_camera_and_refreshes(qapp):
+    from nbodiesgravity.engine.body import CollisionEvent
+
+    sun = CelestialBody("Sun", 1.989e30, np.zeros(3), np.zeros(3), 695700, (1.0, 0.9, 0.2), label="star")
+    earth = CelestialBody("Earth", 5.972e24, np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0172, 0.0]), 6371, (0.2, 0.5, 1.0), label="planet")
+    system = SolarSystem([sun, earth])
+
+    window = MainWindow()
+    window._load_system(system)
+    try:
+        window._gl.camera.set_center("Earth")
+
+        # Simulate the merge the physics layer already performed: Earth absorbed by Sun.
+        with window._sim._lock:
+            window._sim.system.remove_body("Earth")
+
+        window._on_collisions([CollisionEvent(absorbed="Earth", survivor="Sun")])
+
+        # Camera retargeted off the absorbed body onto the survivor.
+        assert window._gl.camera.center_name == "Sun"
+        # Body list / system no longer contains the absorbed body.
+        names = [b.name for b in window._sim.system.bodies]
+        assert "Earth" not in names
+        assert "Sun" in names
+    finally:
+        window._date_timer.stop()
+        window._sim.stop_thread()
+
+
+def test_on_collisions_follows_chain_to_final_survivor(qapp):
+    from nbodiesgravity.engine.body import CollisionEvent
+
+    a = CelestialBody("A", 3.0e30, np.zeros(3), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    b = CelestialBody("B", 2.0e30, np.array([1.0, 0.0, 0.0]), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    c = CelestialBody("C", 1.0e30, np.array([2.0, 0.0, 0.0]), np.zeros(3), 695700, (1.0, 1.0, 1.0), label="star")
+    system = SolarSystem([a, b, c])
+
+    window = MainWindow()
+    window._load_system(system)
+    try:
+        window._gl.camera.set_center("C")
+
+        # Simulate a chained merge already performed by the physics layer:
+        # C absorbed into B, then B absorbed into A. Only A remains.
+        with window._sim._lock:
+            window._sim.system.remove_body("C")
+            window._sim.system.remove_body("B")
+
+        events = [
+            CollisionEvent(absorbed="C", survivor="B"),
+            CollisionEvent(absorbed="B", survivor="A"),
+        ]
+        window._on_collisions(events)
+
+        # Camera followed the chain C -> B -> A, landing on the final survivor.
+        assert window._gl.camera.center_name == "A"
+        names = [bd.name for bd in window._sim.system.bodies]
+        assert names == ["A"]
+    finally:
+        window._date_timer.stop()
+        window._sim.stop_thread()

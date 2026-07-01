@@ -29,6 +29,7 @@ _MAX_SIM_DT: float = 1.0    # max simulated days per sub-step (accuracy cap)
 class SimulationThread(QThread):
     snapshot_ready = pyqtSignal(list)   # list[BodyState]
     blow_up_detected = pyqtSignal()
+    collisions_detected = pyqtSignal(list)   # list[CollisionEvent]
 
     def __init__(self, system: SolarSystem, parent=None) -> None:
         super().__init__(parent)
@@ -92,17 +93,20 @@ class SimulationThread(QThread):
 
             sim_dt = real_dt * self._timescale
 
+            collisions: list = []
             with self._lock:
                 remaining = sim_dt
                 while remaining > 0:
                     step_dt = min(remaining, _MAX_SIM_DT)
-                    self._system.step(step_dt)
+                    collisions.extend(self._system.step(step_dt))
                     remaining -= step_dt
                 snap = self._system.snapshot()
 
             self._elapsed_days += sim_dt
             self.latest_snapshot = snap
             self.snapshot_ready.emit(snap)
+            if collisions:
+                self.collisions_detected.emit(collisions)
 
             if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() or float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True

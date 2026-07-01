@@ -125,6 +125,7 @@ class MainWindow(QMainWindow):
             self._initial_epoch = self._last_epoch
         self._sim = SimulationThread(system)
         self._sim.blow_up_detected.connect(self._on_blow_up)
+        self._sim.collisions_detected.connect(self._on_collisions)
         display_infos = [
             BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.name == "Sun"))
             for b in system.bodies
@@ -549,6 +550,30 @@ class MainWindow(QMainWindow):
     def _on_blow_up(self) -> None:
         self._ctrl.set_playing(False)
         self.statusBar().showMessage("⚠ Blow-up detected (body > 1000 AU). Simulation paused.")
+
+    def _on_collisions(self, events) -> None:
+        """Handle merges reported by the physics thread (UI thread, queued).
+
+        Retargets the camera if it was following an absorbed body, then rebuilds
+        the body list, display infos, and center combo. Collisions are NOT
+        mirrored into _initial_system, so Restart restores the pre-collision
+        epoch state.
+        """
+        if self._sim is None:
+            return
+        center = self._gl.camera.center_name
+        new_center = center
+        for ev in events:
+            # Follow the chain: a survivor of an earlier merge can be absorbed by
+            # a later one within the same batch. Resolve to the final survivor so
+            # the camera never lands on a body that was itself absorbed.
+            if ev.absorbed == new_center:
+                new_center = ev.survivor
+        if new_center != center:
+            self._gl.camera.set_center(new_center)
+            self._ctrl.set_center_name(new_center)
+            self._gl.clear_trails()
+        self._refresh_after_body_change()
 
     def _update_sim_date(self) -> None:
         if self._sim is None:
