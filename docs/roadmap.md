@@ -460,16 +460,16 @@ tag v0.6.0
 
 ### Immediate — v0.5
 
-- [ ] Epoch consistency
-- [ ] Failed-load rollback
-- [ ] Complete persistence
-- [ ] Cancellation behavior
-- [ ] Custom star classification
-- [ ] Documentation consistency
-- [ ] Regression tests
-- [ ] Full test pass
-- [ ] Manual smoke test
-- [ ] Version/release preparation
+- [x] Epoch consistency
+- [x] Failed-load rollback
+- [x] Complete persistence
+- [x] Cancellation behavior
+- [x] Custom star classification
+- [x] Documentation consistency
+- [x] Regression tests
+- [x] Full test pass
+- [x] Manual smoke test
+- [x] Version/release preparation
 - [ ] PR `feature_v5 → main`
 - [ ] Tag `v0.5.0`
 

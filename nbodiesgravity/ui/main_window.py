@@ -32,13 +32,14 @@ class MainWindow(QMainWindow):
         self._loader: DateLoaderWorker | None = None
         self._progress: QProgressDialog | None = None
         self._last_epoch = datetime(2000, 1, 1)
+        self._requested_epoch: datetime | None = None
         self._initial_system: SolarSystem | None = None
         self._initial_epoch: datetime = datetime(2000, 1, 1)
         self._date_timer = QTimer(self)
         self._date_timer.setInterval(250)   # 4 Hz — invisible to the user
         self._date_timer.timeout.connect(self._update_sim_date)
         self._build_ui()
-        self._load_system(load_default_system())
+        self._load_system(load_default_system(), epoch=datetime(2000, 1, 1))
 
     # ----------------------------------------------------------------
     # UI construction
@@ -116,10 +117,14 @@ class MainWindow(QMainWindow):
     # System management
     # ----------------------------------------------------------------
 
-    def _load_system(self, system: SolarSystem, is_restart: bool = False) -> None:
+    def _load_system(
+        self, system: SolarSystem, epoch: datetime | None = None, is_restart: bool = False
+    ) -> None:
         if self._sim is not None:
             self._sim.pause()
             self._sim.stop_thread()
+        if epoch is not None:
+            self._last_epoch = epoch
         if not is_restart:
             self._initial_system = system.clone()
             self._initial_epoch = self._last_epoch
@@ -127,7 +132,7 @@ class MainWindow(QMainWindow):
         self._sim.blow_up_detected.connect(self._on_blow_up)
         self._sim.collisions_detected.connect(self._on_collisions)
         display_infos = [
-            BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.name == "Sun"))
+            BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.label == "star"))
             for b in system.bodies
         ]
         self._gl.set_display_info(display_infos)
@@ -172,18 +177,20 @@ class MainWindow(QMainWindow):
                 num_bodies = len(self._sim.system.bodies)
         else:
             num_bodies = 39
-        self._last_epoch = dt
+        self._requested_epoch = dt
         self._progress = QProgressDialog(
             "Fetching from JPL Horizons…", "Cancel", 0, num_bodies, self
         )
         self._progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress.setMinimumDuration(0)   # show immediately, don't wait 4s
         self._progress.setValue(0)
+        self._progress.canceled.connect(self._on_load_cancel_requested)
         self._progress.show()
         self._loader = DateLoaderWorker(dt)
         self._loader.body_loaded.connect(self._on_body_loaded)
         self._loader.finished.connect(self._on_load_finished)
         self._loader.error.connect(self._on_load_error)
+        self._loader.cancelled.connect(self._on_load_cancelled)
         self._loader.start()
 
     def _on_body_loaded(self, name: str) -> None:
@@ -192,28 +199,46 @@ class MainWindow(QMainWindow):
             prog.setLabelText(f"Loaded {name}…")
             prog.setValue(prog.value() + 1)
 
+    def _on_load_cancel_requested(self) -> None:
+        if self._loader is not None and self._loader.isRunning():
+            self._loader.cancel()
+
     def _on_load_finished(self, system: SolarSystem) -> None:
         if self._progress:
             self._progress.close()
             self._progress = None
         self._loader = None
-        self._load_system(system)
+        epoch = self._requested_epoch if self._requested_epoch is not None else self._last_epoch
+        self._requested_epoch = None
+        self._load_system(system, epoch=epoch)
 
     def _on_load_error(self, msg: str) -> None:
         if self._progress:
             self._progress.close()
             self._progress = None
         self._loader = None
+        self._requested_epoch = None
+        self._ctrl.set_epoch_date(self._last_epoch)
+        self._update_sim_date()
         QMessageBox.warning(
             self, "JPL Horizons Error",
             f"Could not fetch state vectors:\n{msg}\n\nReverted to last valid epoch.",
         )
         self.statusBar().showMessage("JPL error — reverted.")
 
+    def _on_load_cancelled(self) -> None:
+        if self._progress:
+            self._progress.close()
+            self._progress = None
+        self._loader = None
+        self._requested_epoch = None
+        self._ctrl.set_epoch_date(self._last_epoch)
+        self._update_sim_date()
+        self.statusBar().showMessage("Date loading cancelled.")
+
     def _on_restart(self) -> None:
         if self._initial_system is not None:
-            self._last_epoch = self._initial_epoch
-            self._load_system(self._initial_system.clone(), is_restart=True)
+            self._load_system(self._initial_system.clone(), epoch=self._initial_epoch, is_restart=True)
             self.statusBar().showMessage("Simulation restarted.")
 
     # ----------------------------------------------------------------
@@ -445,7 +470,7 @@ class MainWindow(QMainWindow):
         with self._sim._lock:
             bodies = self._sim.system.bodies
             display_infos = [
-                BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.name == "Sun"))
+                BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.label == "star"))
                 for b in bodies
             ]
             self._sim.latest_snapshot = self._sim.system.snapshot()
@@ -492,7 +517,7 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------
 
     def _new_system(self) -> None:
-        self._load_system(load_default_system())
+        self._load_system(load_default_system(), epoch=datetime(2000, 1, 1))
 
     def _save_to_file(self) -> None:
         if self._sim is None:
@@ -505,16 +530,25 @@ class MainWindow(QMainWindow):
         self._ctrl.set_playing(False)
         with self._sim._lock:
             bodies = self._sim.system.bodies
+            current_date = self._last_epoch + timedelta(days=self._sim.elapsed_days)
             data = {
+                "format_version": 1,
+                "epoch": current_date.strftime("%Y-%m-%d"),
                 "bodies": [
                     {
-                        "name": b.name, "mass_kg": b.mass, "radius_km": b.radius,
+                        "name": b.name,
+                        "label": b.label,
+                        "mass_kg": b.mass,
+                        "radius_km": b.radius,
                         "color": list(b.color),
                         "pos_au": b.pos.tolist(),
                         "vel_au_per_day": b.vel.tolist(),
+                        "active": b.active,
+                        "show_trail": b.show_trail,
+                        "show_name": b.show_name,
                     }
                     for b in bodies
-                ]
+                ],
             }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -530,16 +564,32 @@ class MainWindow(QMainWindow):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+
+            epoch_str = data.get("epoch")
+            if epoch_str:
+                try:
+                    epoch = datetime.fromisoformat(epoch_str)
+                except ValueError:
+                    epoch = datetime.strptime(epoch_str, "%Y-%m-%d")
+            else:
+                epoch = datetime(2000, 1, 1)
+
             bodies = [
                 CelestialBody(
-                    name=e["name"], mass=e["mass_kg"],
-                    pos=np.array(e["pos_au"], dtype=float),
-                    vel=np.array(e["vel_au_per_day"], dtype=float),
-                    radius=e["radius_km"], color=tuple(e["color"]),
+                    name=e["name"],
+                    mass=e.get("mass_kg", e.get("mass", 1.0)),
+                    pos=np.array(e.get("pos_au", e.get("position")), dtype=float),
+                    vel=np.array(e.get("vel_au_per_day", e.get("velocity")), dtype=float),
+                    radius=e.get("radius_km", e.get("radius", 1000.0)),
+                    color=tuple(e["color"]),
+                    label=e.get("label", "star" if e["name"] == "Sun" else "planet"),
+                    active=e.get("active", True),
+                    show_trail=e.get("show_trail", True),
+                    show_name=e.get("show_name", True),
                 )
                 for e in data["bodies"]
             ]
-            self._load_system(SolarSystem(bodies))
+            self._load_system(SolarSystem(bodies), epoch=epoch)
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
             QMessageBox.critical(self, "Load Error", f"Cannot parse file:\n{exc}")
 

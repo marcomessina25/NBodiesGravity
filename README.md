@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.5.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -95,6 +95,22 @@ Inline validation is active at all times: the name must be non-empty and unique 
 
 ---
 
+## Roadmap & Specifications
+
+NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`) starting with the **v0.5.0** release.
+
+- **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
+  - **v0.5.0** *(current)*: State consistency, transactional epoch loading, full persistence round-trip, star classification.
+  - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, and deterministic benchmark validation.
+  - **v0.7.0**: Scientific diagnostics, orbital element analysis, and physical plotting.
+  - **v0.8.0**: Performance profiling and scalability improvements.
+  - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
+  - **v1.0.0**: Stable, validated scientific baseline.
+- **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed implementation plan and acceptance criteria for the v0.5.0 release candidate.
+- **[v0.6.0 Specification](docs/specs/v06.md)**: Plan for numerical robustness and validation.
+
+---
+
 ## Installation
 
 ### Prerequisites
@@ -128,7 +144,7 @@ python nbodiesgravity/main.py
 conda run -n nbodiesgravity pytest tests/ -v
 ```
 
-The comprehensive test suite contains **61 tests** covering the integrator, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, and PyQt UI category controls.
+The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, and persistence round-tripping.
 
 ---
 
@@ -148,6 +164,11 @@ The comprehensive test suite contains **61 tests** covering the integrator, body
 ## Project Structure
 
 ```
+docs/
+    roadmap.md                   # Master multi-release development roadmap
+    specs/
+        v05.md                   # v0.5.0 implementation specification
+        v06.md                   # v0.6.0 numerical robustness specification
 nbodiesgravity/
     engine/
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
@@ -175,7 +196,7 @@ nbodiesgravity/
 scripts/
     fetch_j2000.py               # One-time script to regenerate j2000.json
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
-tests/                           # pytest suite (61 tests)
+tests/                           # pytest suite
 environment.yml
 ```
 

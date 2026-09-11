@@ -227,10 +227,13 @@ class GLWidget(QOpenGLWidget):
             glGetUniformLocation(self._sphere_prog, "uView"), 1, GL_FALSE, view.T)
         glUniformMatrix4fv(
             glGetUniformLocation(self._sphere_prog, "uProjection"), 1, GL_FALSE, self._proj.T)
-        sun = next((s for s in snap if s.name == "Sun"), snap[0])
+        star_state = next(
+            (s for s in snap if (info := self._display_info.get(s.name)) and info.is_star),
+            next((s for s in snap if s.name == "Sun"), snap[0]),
+        )
         glUniform3f(
             glGetUniformLocation(self._sphere_prog, "uLightPos"),
-            *(sun.pos - offset).astype(np.float32),
+            *(star_state.pos - offset).astype(np.float32),
         )
         for state in snap:
             if not state.active:
