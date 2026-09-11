@@ -58,11 +58,13 @@ def load_default_system() -> SolarSystem:
 def load_system_at_date(
     epoch: datetime,
     progress_cb: Callable[[str], None],
-) -> SolarSystem:
+    cancel_cb: Callable[[], bool] | None = None,
+) -> SolarSystem | None:
     """Fetch state vectors for all default bodies at *epoch*.
 
     For each body: checks local cache first, then queries JPL Horizons.
     Calls progress_cb(body_name) after each body is resolved.
+    If cancel_cb is provided and returns True, loading terminates early and returns None.
     Raises HorizonsError if any body cannot be fetched.
     """
     # Import here so monkeypatching the module-level name works in tests
@@ -73,11 +75,17 @@ def load_system_at_date(
     epoch_date = epoch.date()
     bodies = []
     for entry in snapshot["bodies"]:
+        if cancel_cb and cancel_cb():
+            return None
         body_id = entry["id"]
         state = _cache.get(body_id, epoch_date)
         if state is None:
+            if cancel_cb and cancel_cb():
+                return None
             state = fetch_fn(body_id, epoch_date)
             _cache.store(body_id, epoch_date, state)
         bodies.append(_body_from_entry(entry, state["pos_au"], state["vel_au_per_day"]))
         progress_cb(entry["name"])
+        if cancel_cb and cancel_cb():
+            return None
     return SolarSystem(bodies)

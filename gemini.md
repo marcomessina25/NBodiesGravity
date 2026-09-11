@@ -1,6 +1,6 @@
 # gemini.md — Gemini Developer & AI Context
 
-Developer/AI context file for the N-body Gravity Simulation project. Read at the start of every session to establish system state, constraints, and architecture. This document is optimized for **Gemini** (using the Antigravity agentic coding assistant).
+Developer/AI context file for the N-body Gravity Simulation project. Read `README.md` and `docs/roadmap.md` at the start of every session to establish system state, constraints, roadmap milestones, and architecture. This document is optimized for **Gemini** (using the Antigravity agentic coding assistant).
 
 ---
 
@@ -19,6 +19,7 @@ Always execute all Python commands within the `nbodiesgravity` environment using
     ```
 
 ### 2. Version Controls & Dependencies
+*   **Version:** v0.5.0 (semantic versioning starting from v0.5.0 baseline).
 *   **Stack:** Python 3.12, PyQt6 (6.5+), PyOpenGL, NumPy (pure vectorized calculations), Requests (for JPL Horizons queries), and `responses` (for testing).
 *   **Freeze Policy:** Do not introduce new Python or system dependencies without explicit user confirmation. If a new library is approved, update the conda configuration in `environment.yml` immediately.
 
@@ -32,7 +33,7 @@ Always push directly to the current working branch. If the current branch is `ma
 An interactive, high-performance 3D N-body gravitational simulation desktop application written in Python, PyQt6, and PyOpenGL. It calculates and visualizes orbital mechanics for stars, planets, and satellites.
 
 ### Core Simulation Features
-1.  **JPL Horizons Sourcing:** Loads state vectors at a selected epoch date from the JPL Horizons API or falls back to a local query cache (`~/.nbodiesgravity/cache.json`) to prevent duplicate network calls. Comes with a pre-fetched default snapshot of 22 bodies at the J2000 epoch.
+1.  **JPL Horizons Sourcing:** Loads state vectors at a selected epoch date from the JPL Horizons API or falls back to a local query cache (`~/.nbodiesgravity/cache.json`) to prevent duplicate network calls. Comes with a pre-fetched default snapshot of 39 bodies at the J2000 epoch.
 2.  **Velocity Verlet Integrator:** A pure NumPy, vectorized N-body integrator using a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to prevent infinite acceleration singularities during close encounters.
 3.  **Real-Time Simulation Thread:** A physics background thread capped at $500\text{ Hz}$ to synchronize simulated time delta (`sim_dt`) to wall-clock time (`real_dt`) accurately:
     $$\text{sim\_dt} = \text{real\_dt} \times \text{timescale}$$
@@ -61,13 +62,13 @@ C:\Projects\NBodiesGravity\nbodiesgravity\
 │   ├── horizons.py                # REST API wrapper for JPL Horizons Vector Table queries
 │   ├── loader.py                  # Loader to build SolarSystem from snapshot or date queries
 │   └── snapshots/
-│       └── j2000.json             # Pre-fetched snapshot (22 default bodies)
+│       └── j2000.json             # Pre-fetched snapshot (39 default bodies)
 ├── ui/
 │   ├── main_window.py             # QMainWindow assembly, wiring hub, and QTimer (4 Hz epoch)
 │   ├── control_panel.py           # Play/pause, speed log slider, date edit, clear trails button
 │   ├── body_list_panel.py         # Bodies scroll panel with active/trail checkboxes and bulk headers
 │   ├── body_editor_dialog.py      # QDialog with template pre-fills & "Average of two" computation
-│   └── date_loader_worker.py      # QThread loader for background JPL fetches (progress bar 0 to 22)
+│   └── date_loader_worker.py      # QThread loader for background JPL fetches (progress bar 0 to 39)
 └── rendering/
     ├── gl_widget.py               # QOpenGLWidget running rendering cycles at 120 FPS
     ├── camera.py                  # Orbital 3D camera tracker (distance, azimuth, elevation)

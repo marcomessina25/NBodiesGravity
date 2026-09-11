@@ -21,7 +21,7 @@ class BodyDisplayInfo:
         """Physical display radius in AU (camera-independent).
 
         Log-scale so moons and giants are proportionally distinguishable.
-        Maps log10(radius_km) from [2, 6] → [0.0003, 0.003] AU.
+        Maps log10(radius_km) from [2, 6] → [0.0001, 0.001] AU.
 
         This keeps bodies smaller than typical moon orbital distances
         (e.g. Earth/Moon gap: ~0.00257 AU, Earth radius here: ~0.00165 AU)
