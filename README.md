@@ -15,6 +15,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 - Time unit: **AU / days** in the Solar System Barycenter (SSB) frame.
 - Configurable timescale via a log-scale speed slider (1 h/s to 1 y/s).
 - **Blow-up detection**: simulation auto-pauses if any body drifts beyond 1000 AU from the origin.
+- **Collision merging**: inelastic collisions where larger masses absorb smaller bodies, conserving mass, momentum, and volume.
 
 ### Solar System Data & Classifications
 
@@ -49,7 +50,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 | Epoch date picker | Select a start date; fetches state vectors from JPL Horizons with a dynamic progress bar |
 | Live simulation date | Shows the current simulated date (YYYY-MM-DD), updated at 4 Hz |
 | Play / Pause | Start or pause the physics loop |
-| Restart | Instantly restarts the simulation from the initial loaded epoch |
+| Restart | Instantly restarts the simulation from the initial loaded epoch (returns to the initial state of the loaded system, not to the state immediately preceding a collision) |
 | Speed slider | 200-step log scale; 1 s = 1 h (left) to 1 s = 1 y (right); scroll-wheel friendly |
 | Center body selector | Sets the camera and trail reference frame; changing it resets camera panning and clears trails |
 | Top View | Instantly aligns view angle looking straight down from the Z-axis, centered on target |
@@ -218,6 +219,9 @@ Trails are reference-frame relative — they show the trajectory as seen from th
 
 **Saving a snapshot**
 *File → Save System…* captures the current live positions and velocities, not the original J2000 state. Use this to resume a simulation from a specific point in time.
+
+**Collisions and restart policy**
+Restart returns to the initial state of the loaded system, not to the state immediately preceding a collision.
 
 **Numerical drift at high timescales**
 At very high timescales (months or years per second) combined with long run times, integration drift accumulates. This is expected behaviour for a simple Verlet integrator and is not a bug.
