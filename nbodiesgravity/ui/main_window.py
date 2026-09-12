@@ -130,6 +130,7 @@ class MainWindow(QMainWindow):
             self._initial_epoch = self._last_epoch
         self._sim = SimulationThread(system)
         self._sim.blow_up_detected.connect(self._on_blow_up)
+        self._sim.numerical_failure_detected.connect(self._on_numerical_failure)
         self._sim.collisions_detected.connect(self._on_collisions)
         display_infos = [
             BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.label == "star"))
@@ -600,6 +601,16 @@ class MainWindow(QMainWindow):
     def _on_blow_up(self) -> None:
         self._ctrl.set_playing(False)
         self.statusBar().showMessage("⚠ Blow-up detected (body > 1000 AU). Simulation paused.")
+
+    def _on_numerical_failure(self, reason: str) -> None:
+        self._ctrl.set_playing(False)
+        self.statusBar().showMessage(f"⚠ Numerical failure: {reason}. Simulation paused.")
+        QMessageBox.warning(
+            self,
+            "Numerical Failure",
+            f"The simulation was paused due to a numerical integrity failure:\n\n{reason}\n\n"
+            "The last valid simulation state has been preserved.",
+        )
 
     def _on_collisions(self, events) -> None:
         """Handle merges reported by the physics thread (UI thread, queued).
