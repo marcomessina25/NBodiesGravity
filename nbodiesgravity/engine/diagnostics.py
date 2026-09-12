@@ -18,8 +18,9 @@ class MetricDrift:
     """Drift metrics comparing an initial value to the current state."""
     initial: float | np.ndarray
     current: float | np.ndarray
-    abs_drift: float | np.ndarray
+    abs_drift: float
     rel_drift: float
+    diff_vector: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class ConservationSnapshot:
     angular_momentum: np.ndarray       # shape (3,) AU² kg day⁻¹
     center_of_mass: np.ndarray         # shape (3,) AU
     total_mass: float                  # kg
+    momentum_scale: float              # Σ m_i * |v_i| (total momentum capacity)
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,12 @@ class DiagnosticReport:
     linear_momentum_drift: MetricDrift
     angular_momentum_drift: MetricDrift
     center_of_mass_drift: MetricDrift
+
+    @property
+    def normalized_momentum_drift(self) -> float:
+        """Linear momentum drift normalized by total system momentum capacity Σ m_i |v_i|."""
+        scale = max(self.initial.momentum_scale, self.current.momentum_scale)
+        return float(self.linear_momentum_drift.abs_drift / scale) if scale > 1e-30 else 0.0
 
 
 def _extract_arrays(
@@ -148,6 +156,7 @@ def compute_snapshot(
     p = compute_linear_momentum(mass, vel)
     l = compute_angular_momentum(pos, vel, mass)
     cm = compute_center_of_mass(pos, mass)
+    p_scale = float(np.sum(mass * np.linalg.norm(vel, axis=1))) if len(mass) > 0 else 0.0
 
     return ConservationSnapshot(
         kinetic_energy=ke,
@@ -157,6 +166,7 @@ def compute_snapshot(
         angular_momentum=l,
         center_of_mass=cm,
         total_mass=total_mass,
+        momentum_scale=p_scale,
     )
 
 
@@ -169,7 +179,7 @@ def compute_drift(initial: float | np.ndarray, current: float | np.ndarray) -> M
         return MetricDrift(
             initial=float(initial),
             current=float(current),
-            abs_drift=diff,
+            abs_drift=abs(diff),
             rel_drift=rel,
         )
 
@@ -182,8 +192,9 @@ def compute_drift(initial: float | np.ndarray, current: float | np.ndarray) -> M
     return MetricDrift(
         initial=init_arr,
         current=curr_arr,
-        abs_drift=diff_arr,
+        abs_drift=abs_err,
         rel_drift=rel,
+        diff_vector=diff_arr,
     )
 
 

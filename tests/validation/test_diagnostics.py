@@ -72,7 +72,8 @@ def test_drift_calculation():
     init_v = np.array([1.0, 0.0, 0.0])
     curr_v = np.array([1.0, 0.1, 0.0])
     drift_v = compute_drift(init_v, curr_v)
-    assert drift_v.abs_drift[1] == pytest.approx(0.1)
+    assert drift_v.abs_drift == pytest.approx(0.1)
+    assert drift_v.diff_vector[1] == pytest.approx(0.1)
     assert drift_v.rel_drift == pytest.approx(0.1)
 
 
