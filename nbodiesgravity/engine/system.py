@@ -24,7 +24,7 @@ class TimeStepConfig:
         Default is 0.01 (~100 steps per orbit).
     max_substeps : int
         Maximum substeps permitted within a single step() call before raising
-        ComputationalBudgetExceededError. Default is 1000.
+        ComputationalBudgetExceededError. Default is 10,000.
     """
     min_dt: float = 1e-5
     max_dt: float = 1.0

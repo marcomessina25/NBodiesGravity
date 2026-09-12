@@ -105,7 +105,7 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 
 - **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
   - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
-  - **v0.6.0** *(current)*: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and O(dt²) convergence validation.
+  - **v0.6.0** *(current)*: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
   - **v0.7.0**: Scientific diagnostics, orbital element analysis, and physical plotting.
   - **v0.8.0**: Performance profiling and scalability improvements.
   - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
@@ -154,7 +154,7 @@ conda run -n nbodiesgravity python scripts/benchmark_engine.py --benchmark earth
 conda run -n nbodiesgravity python scripts/benchmark_engine.py --all
 ```
 
-The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, persistence round-tripping, timestep configuration, numerical failure detection, and deterministic physical benchmarks with second-order convergence verification.
+The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, persistence round-tripping, timestep configuration, numerical failure detection, and deterministic physical benchmarks with fixed-step second-order O(dt²) convergence verification.
 
 ---
 

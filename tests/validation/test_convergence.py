@@ -1,4 +1,9 @@
-"""Convergence validation suite: demonstrates second-order O(dt²) accuracy of Velocity Verlet."""
+"""Convergence validation suite: demonstrates second-order O(dt²) accuracy of fixed-step Velocity Verlet.
+
+Note: This suite specifically validates the underlying fixed-step Velocity Verlet
+integrator. The broader simulation application employs dynamic adaptive timestepping
+to control error during close encounters.
+"""
 import numpy as np
 import pytest
 from nbodiesgravity.engine.benchmarks import create_circular_two_body, create_eccentric_two_body
@@ -24,7 +29,7 @@ def _run_fixed_step(create_fn, total_days: float, step_size: float) -> np.ndarra
 
 
 def test_velocity_verlet_second_order_convergence_circular():
-    """Verify that halving the timestep reduces position error by ~4x (O(dt²))."""
+    """Verify that halving the fixed timestep reduces position error by ~4x (O(dt²))."""
     duration = 50.0  # 50 days
 
     # Reference solution with high resolution dt = 0.01 days
@@ -63,7 +68,7 @@ def test_velocity_verlet_second_order_convergence_circular():
 
 
 def test_velocity_verlet_convergence_eccentric():
-    """Verify convergence on eccentric orbit (e=0.5)."""
+    """Verify fixed-step convergence on eccentric orbit (e=0.5)."""
     duration = 30.0  # 30 days
 
     fn = lambda: create_eccentric_two_body(a=1.0, e=0.5)

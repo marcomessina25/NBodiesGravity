@@ -125,3 +125,27 @@ The engine protects against unphysical states:
 2. **Timestep Bounds**: Verification that $\Delta t > 0$ and $\Delta t$ is finite.
 3. **Displacement Threshold**: Detection of unphysical single-step leaps ($\Delta r > 100\text{ AU}$).
 4. **State Preservation**: On detection of any `NumericalIntegrityError`, intermediate invalid calculations are discarded, the simulation automatically pauses, the last valid simulation snapshot is retained for rendering, and a diagnostic notification is dispatched to the UI.
+
+---
+
+## 7. Deterministic Benchmarks & Convergence Verification
+
+### 7.1 Canonical Benchmark Systems
+The validation layer (`nbodiesgravity.engine.benchmarks`) provides six canonical deterministic benchmarks designed for automated verification:
+
+- **Benchmark A — Free Particle**: Isolated body moving linearly at constant velocity, verifying that $\mathbf{a} = 0$, linear momentum is exact, and position matches $\mathbf{r}(t) = \mathbf{r}_0 + \mathbf{v}_0 t$.
+- **Benchmark B — Circular Two-Body**: Two equal masses ($m_1 = m_2 = 10^{30}\text{ kg}$) in circular orbit at separation $r = 1\text{ AU}$, testing circular orbital frequency and energy conservation.
+- **Benchmark C — Eccentric Two-Body**: Two masses in Keplerian eccentric orbit ($e = 0.5$, $a = 1\text{ AU}$), exercising rapid acceleration variations near periapsis.
+- **Benchmark D — Earth-Sun System**: Realistic masses and orbital parameters for Earth orbiting the Sun ($m_{\rm sun} = 1.989 \times 10^{30}\text{ kg}$, $m_{\rm earth} = 5.972 \times 10^{24}\text{ kg}$, $r = 1\text{ AU}$, circular velocity $v = 2\pi\text{ AU/yr} \approx 0.01720209895\text{ AU/day}$), testing 1-year and multi-year orbital closure.
+- **Benchmark E — Earth-Moon System**: Moon in geocentric orbit ($m_{\rm earth} = 5.972 \times 10^{24}\text{ kg}$, $m_{\rm moon} = 7.342 \times 10^{22}\text{ kg}$, $r \approx 384,400\text{ km} \approx 0.002569555\text{ AU}$), configured with fine substep resolution ($\Delta t_{\rm max} = 0.25\text{ days}$) testing lunar orbital stability (~27.3 day period).
+- **Benchmark F — Lagrange Three-Body Solution (Exact Softened Equilibrium)**: Three equal masses ($m = 10^{30}\text{ kg}$) placed at the vertices of an equilateral triangle of side $L = 1\text{ AU}$. In the standard unsoftened Newtonian model, the angular velocity is $\omega_0 = \sqrt{3Gm / L^3}$. Under the Plummer softening potential $\varepsilon = 10^{-4}\text{ AU}$, the pairwise force along each edge of length $L$ is $F = G m^2 L / (L^2 + \varepsilon^2)^{3/2}$. Projecting both forces toward the barycenter ($R = L / \sqrt{3}$) yields the net centripetal acceleration:
+  $$a_{\rm net} = 2 \cos(30^\circ) \frac{G m L}{(L^2 + \varepsilon^2)^{3/2}} = \frac{\sqrt{3} G m L}{(L^2 + \varepsilon^2)^{3/2}}$$
+  Equating $a_{\rm net} = \omega^2 R = \omega^2 L / \sqrt{3}$ produces the exact softened equilibrium angular velocity:
+  $$\omega = \sqrt{\frac{3 G m}{\left(L^2 + \varepsilon^2\right)^{3/2}}}$$
+  NBodiesGravity initializes Benchmark F with this exact softened angular velocity, guaranteeing that the initial configuration is in exact dynamical equilibrium under the softened force law (reducing identically to $\sqrt{3Gm/L^3}$ when $\varepsilon = 0$).
+
+### 7.2 Convergence Verification: Fixed-Step vs. Adaptive Behavior
+- **Fixed-Step Velocity Verlet Convergence**: The fixed-step Velocity Verlet integrator demonstrates second-order $O(\Delta t^2)$ convergence in the deterministic convergence benchmarks (`tests/validation/test_convergence.py`). Under a fixed timestep $\Delta t$, halving the step size reduces position truncation error at a fixed terminal time by a factor of 4 ($\approx 2^{-2} = 0.25$):
+  $$\frac{e(\Delta t / 2)}{e(\Delta t)} \approx 0.25, \quad p = \log_2 \left(\frac{e(\Delta t)}{e(\Delta t / 2)}\right) \approx 2.0 \pm 0.25$$
+  This validates the second-order convergence of the underlying discrete integration operator on both circular and eccentric Keplerian orbits.
+- **Adaptive Timestepping Semantics**: In the live interactive simulation, timesteps are chosen adaptively based on instantaneous orbital timescale proxies ($T_{ij} \approx 2\pi \sqrt{d_{ij}^3 / G(m_i + m_j)}$) within the bounds $[\text{min\_dt}, \text{max\_dt}]$ and subject to a maximum substep budget (`max_substeps = 10,000`). While adaptive step variation bounds truncation errors during close approaches and maintains numerical stability, the formal asymptotic $O(\Delta t^2)$ convergence rate applies specifically to the fixed-step integrator; the full adaptive engine is governed by timescale-bounded error control.

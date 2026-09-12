@@ -559,12 +559,12 @@ Before opening the PR, all of the following should be true:
 
 ## Documentation
 
-- [ ] Benchmark F softening issue resolved or explicitly documented.
-- [ ] O(dt²) wording is scientifically precise.
-- [ ] `max_substeps` documentation is correct.
-- [ ] README matches the actual v0.6 implementation.
-- [ ] `docs/numerical_model.md` matches the implementation.
-- [ ] `docs/specs/v06.md` matches the implementation.
+- [x] Benchmark F softening issue resolved or explicitly documented.
+- [x] O(dt²) wording is scientifically precise.
+- [x] `max_substeps` documentation is correct.
+- [x] README matches the actual v0.6 implementation.
+- [x] `docs/numerical_model.md` matches the implementation.
+- [x] `docs/specs/v06.md` matches the implementation.
 
 ## Repository
 

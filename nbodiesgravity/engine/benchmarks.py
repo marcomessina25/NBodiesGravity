@@ -155,17 +155,21 @@ def create_three_body_lagrange(
     """Benchmark F — Planar equilateral Lagrange three-body solution.
 
     Three equal-mass bodies rotate around their common barycenter preserving an
-    equilateral triangle with exact analytic period and circular trajectories.
+    equilateral triangle with exact circular trajectories. The initial angular
+    velocity is calculated using the exact softened gravitational equilibrium:
+        ω = sqrt(3 * G * m / (L² + ε²)^1.5)
+    ensuring exact dynamical equilibrium under Plummer softening.
     """
     m = float(mass)
     l = float(side)
     # Radius from barycenter to each vertex: R = L / sqrt(3)
     radius = l / np.sqrt(3.0)
-    # Gravitational force from other two bodies at separation L:
-    # F_net = sqrt(3) * G * m² / L² towards center.
-    # a = F_net / m = sqrt(3) * G * m / L²
-    # a = omega² * R = omega² * L / sqrt(3) => omega² = 3 * G * m / L³
-    omega = float(np.sqrt(3.0 * G_AU_DAY * m / (l ** 3)))
+    # Softened gravitational force from other two bodies at separation L:
+    # F_net = 2 * cos(30°) * G * m² * L / (L² + ε²)^1.5 = sqrt(3) * G * m² * L / (L² + ε²)^1.5 towards center.
+    # a = F_net / m = sqrt(3) * G * m * L / (L² + ε²)^1.5
+    # Centripetal requirement: a = omega² * R = omega² * L / sqrt(3)
+    # => omega² = 3 * G * m / (L² + ε²)^1.5 (exact softened equilibrium; reduces to 3*G*m/L³ when ε=0)
+    omega = float(np.sqrt(3.0 * G_AU_DAY * m / ((l ** 2 + softening ** 2) ** 1.5)))
     v_mag = omega * radius
 
     angles = [0.0, 2.0 * np.pi / 3.0, 4.0 * np.pi / 3.0]

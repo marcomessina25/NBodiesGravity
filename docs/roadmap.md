@@ -169,7 +169,7 @@ See [`v06.md`](v06.md).
 4. Improve handling of pathological close encounters.
 5. Add conservation diagnostics internally.
 6. Add deterministic benchmark systems.
-7. Add convergence tests.
+7. Add fixed-step convergence tests (O(dt²)).
 8. Measure energy, linear momentum and angular momentum drift.
 9. Clarify the numerical meaning of adaptive Velocity Verlet.
 10. Document the limitations of softening and collision merging.
@@ -479,7 +479,7 @@ tag v0.6.0
 - [x] Numerical failure detection
 - [x] Conservation metrics
 - [x] Benchmark systems
-- [x] Convergence tests
+- [x] Fixed-step convergence tests (O(dt²))
 - [x] Long-term stability tests
 - [x] Numerical documentation
 - [x] Validation workflow

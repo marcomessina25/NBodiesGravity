@@ -10,7 +10,7 @@ from nbodiesgravity.engine.benchmarks import (
     create_three_body_lagrange,
 )
 from nbodiesgravity.engine.diagnostics import ConservationTracker
-from nbodiesgravity.engine.integrator import G_AU_DAY
+from nbodiesgravity.engine.integrator import G_AU_DAY, VelocityVerletIntegrator
 
 
 def test_benchmark_a_free_particle():
@@ -127,8 +127,10 @@ def test_benchmark_f_three_body_lagrange():
     system = create_three_body_lagrange(mass=1.0e30, side=1.0)
     tracker = ConservationTracker(system.bodies)
 
-    # Period T = 2 * pi / omega = 2 * pi * sqrt(L³ / (3 * G * m))
-    period = 2.0 * np.pi * np.sqrt(1.0 / (3.0 * G_AU_DAY * 1.0e30))
+    # Softened period T = 2 * pi / omega = 2 * pi * sqrt((L² + ε²)^1.5 / (3 * G * m))
+    eps = system._integrator.softening
+    omega = float(np.sqrt(3.0 * G_AU_DAY * 1.0e30 / ((1.0 + eps ** 2) ** 1.5)))
+    period = 2.0 * np.pi / omega
 
     # Advance for half a period
     t = 0.0
@@ -151,3 +153,19 @@ def test_benchmark_f_three_body_lagrange():
     report = tracker.evaluate(system.bodies)
     assert abs(report.energy_drift.rel_drift) < 1e-4
     assert report.normalized_momentum_drift < 1e-12
+
+
+def test_benchmark_f_exact_softened_equilibrium():
+    """Verify that Benchmark F initializes in exact centripetal equilibrium under softened gravity."""
+    system = create_three_body_lagrange(mass=1.0e30, side=1.0, softening=1e-4)
+    pos = np.array([b.pos for b in system.bodies])
+    masses = np.array([b.mass for b in system.bodies])
+    eps = system._integrator.softening
+    integrator = VelocityVerletIntegrator(softening=eps)
+    acc = integrator._accelerations(pos, masses)
+
+    omega_sq = 3.0 * G_AU_DAY * 1.0e30 / ((1.0 + eps ** 2) ** 1.5)
+    expected_acc = - omega_sq * pos
+
+    assert np.allclose(acc, expected_acc, rtol=1e-12, atol=1e-15)
+
