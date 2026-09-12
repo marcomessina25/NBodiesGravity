@@ -133,3 +133,16 @@ def test_equal_mass_tie_break_keeps_alphabetically_first_name():
     assert events[0].absorbed == "Z"
     assert len(system.bodies) == 1
     assert system.bodies[0].name == "A"
+
+
+def test_merge_conserves_center_of_mass():
+    a = _big("A", 2.0e30, [0.0, 0.0, 0.0], radius=695700.0)
+    b = _big("B", 1.0e30, [1e-4, 0.0, 0.0], radius=695700.0)
+    total_m = a.mass + b.mass
+    expected_cm = (a.mass * a.pos + b.mass * b.pos) / total_m
+
+    system = SolarSystem([a, b])
+    system._resolve_collisions()
+
+    survivor = system.bodies[0]
+    np.testing.assert_allclose(survivor.pos, expected_cm, rtol=1e-12)

@@ -181,9 +181,9 @@ class SolarSystem:
         """Merge any active bodies whose centres overlap (sum of physical radii).
 
         Survivor = larger mass (ties broken by the alphabetically-first name).
-        Momentum is conserved; the survivor's radius grows by equal-density
-        volume. Loops until no overlapping pair remains so chains collapse in a
-        single call. Returns one CollisionEvent per merge performed.
+        Center of mass, mass, and linear momentum are conserved; the survivor's
+        radius grows by equal-density volume. Loops until no overlapping pair remains so
+        chains collapse in a single call. Returns one CollisionEvent per merge performed.
         """
         events: list[CollisionEvent] = []
         while True:
@@ -213,6 +213,9 @@ class SolarSystem:
                 survivor, absorbed = bb, ba
 
             total_mass = survivor.mass + absorbed.mass
+            survivor.pos = (
+                survivor.mass * survivor.pos + absorbed.mass * absorbed.pos
+            ) / total_mass
             survivor.vel = (
                 survivor.mass * survivor.vel + absorbed.mass * absorbed.vel
             ) / total_mass
