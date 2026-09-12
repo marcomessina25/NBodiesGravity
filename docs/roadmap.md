@@ -473,16 +473,16 @@ tag v0.6.0
 - [ ] PR `feature_v5 → main`
 - [ ] Tag `v0.5.0`
 
-### Next — v0.6
+### Current — v0.6
 
-- [ ] Safe adaptive timestep limits
-- [ ] Numerical failure detection
-- [ ] Conservation metrics
-- [ ] Benchmark systems
-- [ ] Convergence tests
-- [ ] Long-term stability tests
-- [ ] Numerical documentation
-- [ ] Validation workflow
+- [x] Safe adaptive timestep limits
+- [x] Numerical failure detection
+- [x] Conservation metrics
+- [x] Benchmark systems
+- [x] Convergence tests
+- [x] Long-term stability tests
+- [x] Numerical documentation
+- [x] Validation workflow
 
 ### Future — v0.7
 
