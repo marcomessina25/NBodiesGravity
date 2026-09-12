@@ -35,6 +35,15 @@ def test_integrator_rejects_nan_vel():
         integrator.step(pos, vel, mass, 0.01)
 
 
+def test_integrator_rejects_inf_vel():
+    integrator = VelocityVerletIntegrator()
+    pos = np.zeros((1, 3))
+    vel = np.array([[np.inf, 0.0, 0.0]])
+    mass = np.array([1e30])
+    with pytest.raises(NumericalIntegrityError, match="Non-finite"):
+        integrator.step(pos, vel, mass, 0.01)
+
+
 def test_integrator_rejects_invalid_dt():
     integrator = VelocityVerletIntegrator()
     pos = np.zeros((1, 3))

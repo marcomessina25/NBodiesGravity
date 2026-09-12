@@ -540,22 +540,22 @@ Before opening the PR, all of the following should be true:
 
 ## Code
 
-- [ ] No known critical numerical-integrity bug.
-- [ ] Timestep bounds are enforced.
-- [ ] Maximum substep budget is enforced.
-- [ ] Invalid states cannot overwrite valid state.
-- [ ] Computational budget failures are handled safely.
-- [ ] Diagnostics use the same physical model as the engine.
-- [ ] Collision behavior remains consistent with the documented model.
+- [x] No known critical numerical-integrity bug.
+- [x] Timestep bounds are enforced.
+- [x] Maximum substep budget is enforced.
+- [x] Invalid states cannot overwrite valid state.
+- [x] Computational budget failures are handled safely.
+- [x] Diagnostics use the same physical model as the engine.
+- [x] Collision behavior remains consistent with the documented model.
 
 ## Validation
 
-- [ ] All deterministic benchmarks pass.
-- [ ] Conservation tests pass.
-- [ ] Fixed-step convergence test passes.
-- [ ] Softening validation passes.
-- [ ] Numerical failure tests pass.
-- [ ] Full pytest suite passes.
+- [x] All deterministic benchmarks pass.
+- [x] Conservation tests pass.
+- [x] Fixed-step convergence test passes.
+- [x] Softening validation passes.
+- [x] Numerical failure tests pass.
+- [x] Full pytest suite passes.
 
 ## Documentation
 
@@ -568,10 +568,10 @@ Before opening the PR, all of the following should be true:
 
 ## Repository
 
-- [ ] `git status` is clean.
-- [ ] No temporary/generated files are included.
-- [ ] `git diff origin/main...v6` contains only intended v0.6 work.
-- [ ] Version information is consistently `0.6.0`.
+- [x] `git status` is clean.
+- [x] No temporary/generated files are included.
+- [x] `git diff origin/main...v6` contains only intended v0.6 work.
+- [x] Version information is consistently `0.6.0`.
 
 ---
 

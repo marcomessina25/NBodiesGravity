@@ -604,11 +604,18 @@ class MainWindow(QMainWindow):
 
     def _on_numerical_failure(self, reason: str) -> None:
         self._ctrl.set_playing(False)
-        self.statusBar().showMessage(f"⚠ Numerical failure: {reason}. Simulation paused.")
+        if "maximum substeps" in reason.lower() or "budget" in reason.lower():
+            title = "Computational Budget Exceeded"
+            lead = "The simulation was paused because the required adaptive substeps exceeded the computational budget:"
+        else:
+            title = "Numerical Failure"
+            lead = "The simulation was paused due to a numerical integrity failure:"
+
+        self.statusBar().showMessage(f"⚠ {title}: {reason}. Simulation paused.")
         QMessageBox.warning(
             self,
-            "Numerical Failure",
-            f"The simulation was paused due to a numerical integrity failure:\n\n{reason}\n\n"
+            title,
+            f"{lead}\n\n{reason}\n\n"
             "The last valid simulation state has been preserved.",
         )
 
