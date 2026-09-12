@@ -93,6 +93,7 @@ def compute_potential_energy(
         return 0.0
     diff = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
     dist_sq = np.einsum("ijk,ijk->ij", diff, diff) + softening ** 2
+    np.fill_diagonal(dist_sq, 1.0)   # prevent divide-by-zero when softening=0.0
     dist = np.sqrt(dist_sq)
 
     # Pairwise mass products G * m_i * m_j
