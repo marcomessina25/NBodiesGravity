@@ -6,6 +6,8 @@ and drift metrics across simulation runs.
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from collections import deque
+import threading
 from typing import Sequence, Union
 import numpy as np
 
@@ -237,3 +239,72 @@ class ConservationTracker:
             angular_momentum_drift=l_drift,
             center_of_mass_drift=cm_drift,
         )
+
+
+class DiagnosticsHistoryBuffer:
+    """Fixed-capacity thread-safe time-series buffer of conservation and performance metrics."""
+
+    def __init__(self, max_points: int = 2000) -> None:
+        self.max_points = max_points
+        self._lock = threading.Lock()
+        self.clear()
+
+    def clear(self) -> None:
+        with self._lock:
+            self._times: deque[float] = deque(maxlen=self.max_points)
+            self._kinetic: deque[float] = deque(maxlen=self.max_points)
+            self._potential: deque[float] = deque(maxlen=self.max_points)
+            self._total_energy: deque[float] = deque(maxlen=self.max_points)
+            self._energy_rel_drift: deque[float] = deque(maxlen=self.max_points)
+            self._momentum_norm_drift: deque[float] = deque(maxlen=self.max_points)
+            self._angular_momentum_rel_drift: deque[float] = deque(maxlen=self.max_points)
+            self._center_of_mass_drift: deque[float] = deque(maxlen=self.max_points)
+            self._substeps: deque[int] = deque(maxlen=self.max_points)
+            self._adaptive_dt: deque[float] = deque(maxlen=self.max_points)
+            self._latest_report: DiagnosticReport | None = None
+
+    def append(
+        self,
+        time: float,
+        report: DiagnosticReport,
+        substeps: int = 0,
+        adaptive_dt: float = 0.0,
+    ) -> None:
+        with self._lock:
+            self._times.append(float(time))
+            self._kinetic.append(float(report.current.kinetic_energy))
+            self._potential.append(float(report.current.potential_energy))
+            self._total_energy.append(float(report.current.total_energy))
+            self._energy_rel_drift.append(float(report.energy_drift.rel_drift))
+            self._momentum_norm_drift.append(float(report.normalized_momentum_drift))
+            self._angular_momentum_rel_drift.append(float(report.angular_momentum_drift.rel_drift))
+            self._center_of_mass_drift.append(float(report.center_of_mass_drift.abs_drift))
+            self._substeps.append(int(substeps))
+            self._adaptive_dt.append(float(adaptive_dt))
+            self._latest_report = report
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._times)
+
+    @property
+    def latest_report(self) -> DiagnosticReport | None:
+        with self._lock:
+            return self._latest_report
+
+    def get_data(self) -> dict[str, np.ndarray]:
+        """Return copied numpy arrays of all time-series metrics."""
+        with self._lock:
+            return {
+                "times": np.array(self._times, dtype=float),
+                "kinetic_energy": np.array(self._kinetic, dtype=float),
+                "potential_energy": np.array(self._potential, dtype=float),
+                "total_energy": np.array(self._total_energy, dtype=float),
+                "energy_rel_drift": np.array(self._energy_rel_drift, dtype=float),
+                "momentum_norm_drift": np.array(self._momentum_norm_drift, dtype=float),
+                "angular_momentum_rel_drift": np.array(self._angular_momentum_rel_drift, dtype=float),
+                "center_of_mass_drift": np.array(self._center_of_mass_drift, dtype=float),
+                "substeps": np.array(self._substeps, dtype=int),
+                "adaptive_dt": np.array(self._adaptive_dt, dtype=float),
+            }
+

@@ -26,6 +26,7 @@ class ControlPanel(QWidget):
     show_names_toggled = pyqtSignal(bool)     # True = show names
     restart_requested = pyqtSignal()          # user clicked "Restart"
     top_view_requested = pyqtSignal()         # user clicked "Top View"
+    diagnostics_requested = pyqtSignal()      # user clicked "Diagnostics"
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -94,6 +95,11 @@ class ControlPanel(QWidget):
         self._clear_trails_btn = QPushButton("Clear Trails")
         self._clear_trails_btn.clicked.connect(self.clear_trails_requested)
         layout.addWidget(self._clear_trails_btn)
+
+        layout.addSpacing(8)
+        self._diag_btn = QPushButton("📊 Diagnostics")
+        self._diag_btn.clicked.connect(self.diagnostics_requested)
+        layout.addWidget(self._diag_btn)
 
         layout.addSpacing(12)
         self._show_names_cb = QCheckBox("Show Names")

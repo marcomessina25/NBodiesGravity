@@ -521,8 +521,8 @@ tag v0.6.0
 
 | Document | Release | Purpose |
 |---|---|---|
-| [`v05.md`](v05.md) | v0.5.0 | Detailed implementation plan for finishing `feature_v5` and preparing the PR to `main` |
-| [`v06.md`](v06.md) | v0.6.0 | Detailed implementation plan for numerical robustness and validation |
-| `v07.md` | v0.7.0 | To be created when v0.6.0 is complete |
+| [`v05.md`](specs/v05.md) | v0.5.0 | Detailed implementation plan for finishing `feature_v5` and preparing the PR to `main` |
+| [`v06.md`](specs/v06.md) | v0.6.0 | Detailed implementation plan for numerical robustness and validation |
+| [`v07.md`](specs/v07.md) | v0.7.0 | Detailed implementation plan for scientific diagnostics, orbital analysis, and physical visualization |
 | `v08.md` | v0.8.0 | To be created when v0.7.0 is complete |
 | `v09.md` | v0.9.0 | To be created when v0.8.0 is complete |

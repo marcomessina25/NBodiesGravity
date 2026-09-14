@@ -97,6 +97,30 @@ class SolarSystem:
         self._bodies: list[CelestialBody] = list(bodies)
         self._timestep_config = timestep_config if timestep_config is not None else TimeStepConfig()
         self._integrator = VelocityVerletIntegrator(softening=softening)
+        self._last_substeps: int = 0
+        self._cumulative_substeps: int = 0
+        self._last_adaptive_dt: float = 0.0
+
+    @property
+    def softening(self) -> float:
+        return self._integrator.softening
+
+    @property
+    def last_substeps(self) -> int:
+        return self._last_substeps
+
+    @property
+    def cumulative_substeps(self) -> int:
+        return self._cumulative_substeps
+
+    @property
+    def last_adaptive_dt(self) -> float:
+        return self._last_adaptive_dt
+
+    def reset_stats(self) -> None:
+        self._last_substeps = 0
+        self._cumulative_substeps = 0
+        self._last_adaptive_dt = 0.0
 
     @property
     def timestep_config(self) -> TimeStepConfig:
@@ -144,6 +168,8 @@ class SolarSystem:
         """
         active = [b for b in self._bodies if b.active]
         if not active:
+            self._last_substeps = 0
+            self._last_adaptive_dt = 0.0
             return []
 
         if dt <= 0:
@@ -170,6 +196,10 @@ class SolarSystem:
             step_dt = min(remaining, max_step)
             positions, velocities = self._integrator.step(positions, velocities, masses, step_dt)
             remaining -= step_dt
+
+        self._last_substeps = substeps
+        self._cumulative_substeps += substeps
+        self._last_adaptive_dt = max_step
 
         for i, body in enumerate(active):
             body.pos = positions[i]

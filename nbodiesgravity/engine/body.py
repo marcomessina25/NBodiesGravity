@@ -5,7 +5,7 @@ import numpy as np
 
 
 class BodyState(NamedTuple):
-    """Thread-safe snapshot of a body's kinematic state.
+    """Thread-safe snapshot of a body's kinematic and physical state.
 
     Use NamedTuple so the object is immutable at the Python level.
     Array *contents* can still be mutated, so snapshot() copies them.
@@ -14,6 +14,11 @@ class BodyState(NamedTuple):
     pos: np.ndarray   # AU, shape (3,)
     vel: np.ndarray   # AU/day, shape (3,)
     active: bool = True   # False = excluded from integrator, invisible in render
+    mass: float = 0.0     # kg
+    radius: float = 0.0   # km
+    color: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    label: str = "planet"
+    show_name: bool = True
 
 
 class CollisionEvent(NamedTuple):
@@ -41,10 +46,15 @@ class CelestialBody:
     show_name: bool = True
 
     def snapshot(self) -> BodyState:
-        """Return a thread-safe copy of kinematic state."""
+        """Return a thread-safe copy of kinematic and physical state."""
         return BodyState(
             name=self.name,
             pos=self.pos.copy(),
             vel=self.vel.copy(),
             active=self.active,
+            mass=self.mass,
+            radius=self.radius,
+            color=self.color,
+            label=self.label,
+            show_name=self.show_name,
         )

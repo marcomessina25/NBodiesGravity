@@ -1,3 +1,3 @@
 """NBodiesGravity - 3D N-body gravitational simulation of the Solar System."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

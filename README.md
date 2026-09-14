@@ -2,16 +2,17 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.6.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.7.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
 ## Features
 
-### Simulation Engine
+### Simulation Engine & Diagnostics
 
 - N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
+- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
 - **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
 - **Scientific Conservation Diagnostics**: UI-independent diagnostics layer calculating kinetic, softened potential, and total mechanical energy, linear momentum, angular momentum, center of mass, and drift metrics.
@@ -105,14 +106,15 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 
 - **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
   - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
-  - **v0.6.0** *(current)*: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
-  - **v0.7.0**: Scientific diagnostics, orbital element analysis, and physical plotting.
+  - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
+  - **v0.7.0** *(current)*: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
   - **v0.8.0**: Performance profiling and scalability improvements.
   - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
   - **v1.0.0**: Stable, validated scientific baseline.
 - **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
 - **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
 - **[v0.6.0 Specification](docs/specs/v06.md)**: Detailed plan and acceptance criteria for v0.6.0.
+- **[v0.7.0 Specification](docs/specs/v07.md)**: Detailed plan and acceptance criteria for v0.7.0.
 
 ---
 

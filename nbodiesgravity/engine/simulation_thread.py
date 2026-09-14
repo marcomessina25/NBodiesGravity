@@ -22,6 +22,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from nbodiesgravity.engine.body import BodyState
 from nbodiesgravity.engine.exceptions import NumericalIntegrityError
 from nbodiesgravity.engine.system import SolarSystem
+from nbodiesgravity.engine.diagnostics import ConservationTracker, DiagnosticsHistoryBuffer, DiagnosticReport
 
 _TARGET_HZ: int = 500       # real-time physics rate cap (~500 iterations/s)
 _MAX_SIM_DT: float = 1.0    # max simulated days per sub-step (accuracy cap)
@@ -32,6 +33,7 @@ class SimulationThread(QThread):
     blow_up_detected = pyqtSignal()
     numerical_failure_detected = pyqtSignal(str)
     collisions_detected = pyqtSignal(list)   # list[CollisionEvent]
+    diagnostics_ready = pyqtSignal(object)  # DiagnosticReport
 
     def __init__(self, system: SolarSystem, parent=None) -> None:
         super().__init__(parent)
@@ -42,6 +44,10 @@ class SimulationThread(QThread):
         self._lock = threading.Lock()
         self.latest_snapshot: list[BodyState] = system.snapshot()
         self._elapsed_days: float = 0.0
+        self._tracker = ConservationTracker(system.bodies, softening=system.softening)
+        self._history = DiagnosticsHistoryBuffer(max_points=2000)
+        self._latest_report: DiagnosticReport | None = None
+        self._last_diag_time: float = 0.0
 
     @property
     def is_playing(self) -> bool:
@@ -55,6 +61,18 @@ class SimulationThread(QThread):
     def elapsed_days(self) -> float:
         """Simulated days elapsed since last system load. GIL-safe float read."""
         return self._elapsed_days
+
+    @property
+    def diagnostics_history(self) -> DiagnosticsHistoryBuffer:
+        return self._history
+
+    @property
+    def latest_diagnostic_report(self) -> DiagnosticReport | None:
+        return self._latest_report
+
+    @property
+    def conservation_tracker(self) -> ConservationTracker:
+        return self._tracker
 
     def set_timescale(self, days_per_second: float) -> None:
         self._timescale = max(days_per_second, 1e-3)
@@ -70,6 +88,9 @@ class SimulationThread(QThread):
         with self._lock:
             self._system = system
             self.latest_snapshot = system.snapshot()
+            self._tracker = ConservationTracker(system.bodies, softening=system.softening)
+            self._history.clear()
+            self._latest_report = None
         self._elapsed_days = 0.0   # reset date counter to match the new epoch
 
     def refresh_snapshot(self) -> None:
@@ -114,6 +135,22 @@ class SimulationThread(QThread):
             self.snapshot_ready.emit(snap)
             if collisions:
                 self.collisions_detected.emit(collisions)
+
+            # Record diagnostics periodically (~20 Hz)
+            if t_now - self._last_diag_time >= 0.05:
+                self._last_diag_time = t_now
+                try:
+                    report = self._tracker.evaluate(snap)
+                    self._history.append(
+                        self._elapsed_days,
+                        report,
+                        substeps=self._system.last_substeps,
+                        adaptive_dt=self._system.last_adaptive_dt,
+                    )
+                    self._latest_report = report
+                    self.diagnostics_ready.emit(report)
+                except Exception:
+                    pass
 
             if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() or float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True
