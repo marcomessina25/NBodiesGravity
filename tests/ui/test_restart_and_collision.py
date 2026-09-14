@@ -175,3 +175,34 @@ def test_on_collisions_follows_chain_to_final_survivor(qapp):
     finally:
         window._date_timer.stop()
         window._sim.stop_thread()
+
+
+def test_on_numerical_failure_ui_handling(qapp, monkeypatch):
+    """Verify that _on_numerical_failure distinguishes between computational budget and numerical error."""
+    sun = CelestialBody("Sun", 1.989e30, np.zeros(3), np.zeros(3), 695700, (1.0, 0.9, 0.2), label="star")
+    system = SolarSystem([sun])
+    window = MainWindow()
+    window._load_system(system)
+
+    recorded_boxes = []
+    monkeypatch.setattr(
+        "nbodiesgravity.ui.main_window.QMessageBox.warning",
+        lambda parent, title, text: recorded_boxes.append((title, text)),
+    )
+
+    try:
+        # Case 1: Computational budget exceeded
+        window._on_numerical_failure("Maximum substeps (10000) exceeded for step dt=1.0.")
+        assert len(recorded_boxes) == 1
+        assert recorded_boxes[0][0] == "Computational Budget Exceeded"
+        assert "computational budget" in recorded_boxes[0][1]
+
+        # Case 2: Numerical integrity failure
+        window._on_numerical_failure("Non-finite coordinates encountered in acceleration calculation.")
+        assert len(recorded_boxes) == 2
+        assert recorded_boxes[1][0] == "Numerical Failure"
+        assert "numerical integrity failure" in recorded_boxes[1][1]
+    finally:
+        window._date_timer.stop()
+        window._sim.stop_thread()
+

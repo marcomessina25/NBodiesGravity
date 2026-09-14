@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.5.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.6.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -11,11 +11,14 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 ### Simulation Engine
 
 - N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
+- **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
+- **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
+- **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
+- **Scientific Conservation Diagnostics**: UI-independent diagnostics layer calculating kinetic, softened potential, and total mechanical energy, linear momentum, angular momentum, center of mass, and drift metrics.
 - Physics loop runs in a background QThread at **500 Hz**, keeping the UI fully responsive and fluid.
 - Time unit: **AU / days** in the Solar System Barycenter (SSB) frame.
 - Configurable timescale via a log-scale speed slider (1 h/s to 1 y/s).
 - **Blow-up detection**: simulation auto-pauses if any body drifts beyond 1000 AU from the origin.
-- **Collision merging**: inelastic collisions where larger masses absorb smaller bodies, conserving mass, momentum, and volume.
 
 ### Solar System Data & Classifications
 
@@ -98,17 +101,18 @@ Inline validation is active at all times: the name must be non-empty and unique 
 
 ## Roadmap & Specifications
 
-NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`) starting with the **v0.5.0** release.
+NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 
 - **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
-  - **v0.5.0** *(current)*: State consistency, transactional epoch loading, full persistence round-trip, star classification.
-  - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, and deterministic benchmark validation.
+  - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
+  - **v0.6.0** *(current)*: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
   - **v0.7.0**: Scientific diagnostics, orbital element analysis, and physical plotting.
   - **v0.8.0**: Performance profiling and scalability improvements.
   - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
   - **v1.0.0**: Stable, validated scientific baseline.
-- **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed implementation plan and acceptance criteria for the v0.5.0 release candidate.
-- **[v0.6.0 Specification](docs/specs/v06.md)**: Plan for numerical robustness and validation.
+- **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
+- **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
+- **[v0.6.0 Specification](docs/specs/v06.md)**: Detailed plan and acceptance criteria for v0.6.0.
 
 ---
 
@@ -129,7 +133,7 @@ conda env create -f environment.yml
 conda activate nbodiesgravity
 ```
 
-### Run
+### Run Application
 
 ```bash
 # With conda run (no manual activation needed)
@@ -139,13 +143,18 @@ conda run -n nbodiesgravity python nbodiesgravity/main.py
 python nbodiesgravity/main.py
 ```
 
-### Tests
+### Automated Tests & Numerical Benchmarks
 
 ```bash
+# Run the complete test suite (engine, data, rendering, ui, validation)
 conda run -n nbodiesgravity pytest tests/ -v
+
+# Run the headless numerical benchmarking tool
+conda run -n nbodiesgravity python scripts/benchmark_engine.py --benchmark earth_sun --years 1.0
+conda run -n nbodiesgravity python scripts/benchmark_engine.py --all
 ```
 
-The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, and persistence round-tripping.
+The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, persistence round-tripping, timestep configuration, numerical failure detection, and deterministic physical benchmarks with fixed-step second-order O(dt²) convergence verification.
 
 ---
 
@@ -166,15 +175,19 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 
 ```
 docs/
+    numerical_model.md           # Mathematical formulations, softening, and validation methodology
     roadmap.md                   # Master multi-release development roadmap
     specs/
         v05.md                   # v0.5.0 implementation specification
         v06.md                   # v0.6.0 numerical robustness specification
 nbodiesgravity/
     engine/
+        benchmarks.py            # Canonical deterministic benchmarks A through F
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
-        integrator.py            # Vectorized pairwise Velocity Verlet integrator
-        system.py                # SolarSystem — step, snapshot, add/remove body
+        diagnostics.py           # Reusable scientific conservation metrics (energy, momentum, CM)
+        exceptions.py            # NumericalIntegrityError and budget exceptions
+        integrator.py            # Vectorized pairwise Velocity Verlet integrator with softening
+        system.py                # SolarSystem — step, snapshot, TimeStepConfig, collision resolution
         simulation_thread.py     # QThread physics loop (500 Hz loop, real-time synchronized)
     data/
         cache.py                 # Local JSON cache for Horizons results
@@ -195,9 +208,15 @@ nbodiesgravity/
         main_window.py           # Top-level window assembly and signal wiring
     main.py                      # Entry point
 scripts/
+    benchmark_engine.py          # Headless benchmarking and conservation reporting tool
     fetch_j2000.py               # One-time script to regenerate j2000.json
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
-tests/                           # pytest suite
+tests/
+    data/                        # Horizons client and cache tests
+    engine/                      # Integrator, system, collisions, timestep, and failure tests
+    rendering/                   # OpenGL, camera, shaders, and trail buffer tests
+    ui/                          # PyQt widget, transaction, and persistence tests
+    validation/                  # Physical conservation, benchmarks A-F, convergence, and softening tests
 environment.yml
 ```
 

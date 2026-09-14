@@ -1,10 +1,81 @@
 from __future__ import annotations
 import numpy as np
+from dataclasses import dataclass
 from .body import CelestialBody, BodyState, CollisionEvent
-from .integrator import VelocityVerletIntegrator
+from .exceptions import NumericalIntegrityError, ComputationalBudgetExceededError
+from .integrator import VelocityVerletIntegrator, SOFTENING
 
 #: Kilometres per Astronomical Unit — converts km radii to AU for collision tests.
 KM_PER_AU: float = 1.495978707e8
+
+
+@dataclass(frozen=True)
+class TimeStepConfig:
+    """Configuration parameters for adaptive timestep selection.
+
+    Parameters
+    ----------
+    min_dt : float
+        Minimum permitted integration substep in days. Default is 1e-5 days (~0.864 s).
+    max_dt : float
+        Maximum permitted integration substep in days. Default is 1.0 day.
+    safety_factor : float
+        Fraction of minimum estimated pairwise orbital timescale to target per step.
+        Default is 0.01 (~100 steps per orbit).
+    max_substeps : int
+        Maximum substeps permitted within a single step() call before raising
+        ComputationalBudgetExceededError. Default is 10,000.
+    """
+    min_dt: float = 1e-5
+    max_dt: float = 1.0
+    safety_factor: float = 0.01
+    max_substeps: int = 10_000
+
+    def __post_init__(self) -> None:
+        if self.min_dt <= 0:
+            raise ValueError(f"min_dt must be positive, got {self.min_dt}")
+        if self.max_dt < self.min_dt:
+            raise ValueError(f"max_dt ({self.max_dt}) cannot be less than min_dt ({self.min_dt})")
+        if self.safety_factor <= 0:
+            raise ValueError(f"safety_factor must be positive, got {self.safety_factor}")
+        if self.max_substeps <= 0:
+            raise ValueError(f"max_substeps must be positive, got {self.max_substeps}")
+
+
+def compute_adaptive_dt(
+    positions: np.ndarray, masses: np.ndarray, config: TimeStepConfig | None = None
+) -> float:
+    """Compute adaptive timestep (in days) based on shortest orbital timescale.
+
+    Calculates pairwise orbital periods using Keplerian 2-body approximations
+    and scales the minimum period by config.safety_factor, clamped between
+    config.min_dt and config.max_dt.
+    """
+    if config is None:
+        config = TimeStepConfig()
+
+    n = len(positions)
+    if n < 2:
+        return config.max_dt
+
+    # pairwise coordinate difference, shape (N, N, 3)
+    diff = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
+    dist = np.sqrt(np.einsum("ijk,ijk->ij", diff, diff))
+    np.fill_diagonal(dist, np.inf)
+
+    mass_sum = masses[np.newaxis, :] + masses[:, np.newaxis]
+
+    from .integrator import G_AU_DAY
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t_orb = 2.0 * np.pi * np.sqrt(dist**3 / (G_AU_DAY * mass_sum + 1e-30))
+
+    min_t_orb = np.nanmin(t_orb)
+    if np.isfinite(min_t_orb):
+        # Target safety_factor * min_t_orb, bounded between min_dt and max_dt
+        return float(max(config.min_dt, min(config.max_dt, config.safety_factor * min_t_orb)))
+
+    return config.max_dt
 
 
 class SolarSystem:
@@ -17,9 +88,23 @@ class SolarSystem:
     once per tick inside step() and any change takes effect within one tick.
     """
 
-    def __init__(self, bodies: list[CelestialBody]) -> None:
+    def __init__(
+        self,
+        bodies: list[CelestialBody],
+        timestep_config: TimeStepConfig | None = None,
+        softening: float = SOFTENING,
+    ) -> None:
         self._bodies: list[CelestialBody] = list(bodies)
-        self._integrator = VelocityVerletIntegrator()
+        self._timestep_config = timestep_config if timestep_config is not None else TimeStepConfig()
+        self._integrator = VelocityVerletIntegrator(softening=softening)
+
+    @property
+    def timestep_config(self) -> TimeStepConfig:
+        return self._timestep_config
+
+    @timestep_config.setter
+    def timestep_config(self, config: TimeStepConfig) -> None:
+        self._timestep_config = config
 
     def clone(self) -> SolarSystem:
         """Return a deep copy of the system and its bodies."""
@@ -38,7 +123,11 @@ class SolarSystem:
             )
             for b in self._bodies
         ]
-        return SolarSystem(bodies)
+        return SolarSystem(
+            bodies,
+            timestep_config=self._timestep_config,
+            softening=self._integrator.softening,
+        )
 
     @property
     def bodies(self) -> list[CelestialBody]:
@@ -57,34 +146,27 @@ class SolarSystem:
         if not active:
             return []
 
-        positions  = np.array([b.pos for b in active])
-        velocities = np.array([b.vel for b in active])
-        masses     = np.array([b.mass for b in active])
+        if dt <= 0:
+            raise NumericalIntegrityError(f"Step dt must be positive, got {dt}")
+        if not np.isfinite(dt):
+            raise NumericalIntegrityError(f"Step dt must be finite, got {dt}")
 
-        # Compute adaptive maximum step size based on minimum pairwise orbital timescale
-        max_step = 1.0
-        if len(active) >= 2:
-            # pairwise coordinate difference, shape (N, N, 3)
-            diff = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
-            dist = np.sqrt(np.einsum("ijk,ijk->ij", diff, diff))
-            np.fill_diagonal(dist, np.inf)
+        positions  = np.array([b.pos for b in active], dtype=float)
+        velocities = np.array([b.vel for b in active], dtype=float)
+        masses     = np.array([b.mass for b in active], dtype=float)
 
-            # pairwise mass sums, shape (N, N)
-            mass_sum = masses[np.newaxis, :] + masses[:, np.newaxis]
-
-            from .integrator import G_AU_DAY
-            
-            # orbital period proxy: T_ij = 2 * pi * sqrt(d_ij^3 / (G * (M_i + M_j)))
-            with np.errstate(divide='ignore', invalid='ignore'):
-                t_orb = 2.0 * np.pi * np.sqrt(dist**3 / (G_AU_DAY * mass_sum + 1e-30))
-            
-            min_t_orb = np.nanmin(t_orb)
-            if np.isfinite(min_t_orb):
-                # Target ~100 steps per orbit (0.01 * T) capped at 1.0 day max, with a floor of 1e-5 to prevent infinite loops
-                max_step = max(1e-5, min(1.0, 0.01 * min_t_orb))
+        max_step = compute_adaptive_dt(positions, masses, self._timestep_config)
 
         remaining = dt
-        while remaining > 0:
+        substeps = 0
+        eps_dt = min(1e-9, 1e-4 * max_step)
+        while remaining > eps_dt:
+            substeps += 1
+            if substeps > self._timestep_config.max_substeps:
+                raise ComputationalBudgetExceededError(
+                    f"Maximum substeps ({self._timestep_config.max_substeps}) exceeded for step dt={dt}. "
+                    f"Selected substep dt={max_step:.6e} days."
+                )
             step_dt = min(remaining, max_step)
             positions, velocities = self._integrator.step(positions, velocities, masses, step_dt)
             remaining -= step_dt
@@ -99,9 +181,9 @@ class SolarSystem:
         """Merge any active bodies whose centres overlap (sum of physical radii).
 
         Survivor = larger mass (ties broken by the alphabetically-first name).
-        Momentum is conserved; the survivor's radius grows by equal-density
-        volume. Loops until no overlapping pair remains so chains collapse in a
-        single call. Returns one CollisionEvent per merge performed.
+        Center of mass, mass, and linear momentum are conserved; the survivor's
+        radius grows by equal-density volume. Loops until no overlapping pair remains so
+        chains collapse in a single call. Returns one CollisionEvent per merge performed.
         """
         events: list[CollisionEvent] = []
         while True:
@@ -131,6 +213,9 @@ class SolarSystem:
                 survivor, absorbed = bb, ba
 
             total_mass = survivor.mass + absorbed.mass
+            survivor.pos = (
+                survivor.mass * survivor.pos + absorbed.mass * absorbed.pos
+            ) / total_mass
             survivor.vel = (
                 survivor.mass * survivor.vel + absorbed.mass * absorbed.vel
             ) / total_mass
