@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Synthetic N-body scaling and component overhead benchmark script.
 
-Measures scalability across varying body counts (N = 2, 10, 39, 100, 250, 500, 1000):
+Workload methodology:
+- N = 39 evaluates the realistic default Solar System application workload.
+- Other N values (N = 2, 10, 100, 250, 500; optional stress N = 1000) evaluate
+  deterministic synthetic star-centric systems for controlled computational scaling.
+
+Measures:
 - Pure physics stepping throughput
 - Physics + Diagnostics overhead
 - Physics + Diagnostics + Snapshot overhead
@@ -199,7 +204,7 @@ def main() -> int:
         "--bodies",
         type=str,
         default="2,10,39,100,250,500",
-        help="Comma-separated list of body counts to evaluate (default: 2,10,39,100,250,500)",
+        help="Comma-separated list of body counts to evaluate (default: 2,10,39,100,250,500; N=1000 is an optional stress workload)",
     )
     parser.add_argument(
         "--steps",

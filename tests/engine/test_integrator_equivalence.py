@@ -61,6 +61,46 @@ def test_step_a0_reuse_equivalence():
     assert np.array_equal(v2_no_reuse, v2_r)
 
 
+def test_multi_substep_trajectory_acceleration_reuse():
+    """Verify multi-substep integration with acceleration reuse matches reference path over 50 steps."""
+    rng = np.random.default_rng(999)
+    n = 8
+    pos_init = rng.uniform(-10.0, 10.0, (n, 3))
+    vel_init = rng.uniform(-0.02, 0.02, (n, 3))
+    masses = rng.uniform(1e22, 1e30, n)
+    dt = 0.02
+    steps = 50
+    itg = VelocityVerletIntegrator(softening=SOFTENING)
+
+    # Reference path: recompute initial acceleration for every step (no a0 passed)
+    pos_ref = pos_init.copy()
+    vel_ref = vel_init.copy()
+    for _ in range(steps):
+        pos_ref, vel_ref = itg.step(pos_ref, vel_ref, masses, dt)
+
+    # Optimized path: compute a0 once, then pass a0 and receive return_acc
+    pos_opt = pos_init.copy()
+    vel_opt = vel_init.copy()
+    a_current = None
+    for _ in range(steps):
+        pos_opt, vel_opt, a_current = itg.step(
+            pos_opt, vel_opt, masses, dt, a0=a_current, return_acc=True
+        )
+
+    # Numerical equivalence verification
+    np.testing.assert_allclose(pos_opt, pos_ref, rtol=1e-14, atol=1e-15)
+    np.testing.assert_allclose(vel_opt, vel_ref, rtol=1e-14, atol=1e-15)
+
+    # Also verify that a_current strictly matches recomputed acceleration at final state
+    a_final_recomputed = itg._accelerations(pos_opt, masses)
+    np.testing.assert_allclose(a_current, a_final_recomputed, rtol=1e-14, atol=1e-15)
+
+    # Verify sensitivity: corrupted a0 must cause divergence
+    corrupted_a0 = a_current + 1.0
+    p_bad, _, _ = itg.step(pos_opt, vel_opt, masses, dt, a0=corrupted_a0, return_acc=True)
+    assert not np.allclose(p_bad, pos_ref, rtol=1e-4)
+
+
 def test_adaptive_dt_upper_triangle_equivalence():
     """Verify that upper-triangle compute_adaptive_dt matches full-matrix calculation."""
     np.random.seed(789)

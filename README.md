@@ -11,7 +11,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 ### Simulation Engine & High-Performance Numerics
 
 - N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
-- **Optimized $O(N^2)$ Pairwise Vectorization**: In-place distance scaling and einsum contractions eliminate intermediate NumPy allocations, achieving **2.2x to 9.6x speedups** with bit-level mathematical equivalence ($< 10^{-15}$ relative error).
+- **Optimized $O(N^2)$ Pairwise Vectorization**: In-place distance scaling and einsum contractions eliminate intermediate NumPy allocations, achieving **2.2x to 9.6x speedups** while reproducing reference results within $< 10^{-15}$ relative error on the validated workloads.
 - **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet substeps, halving expensive pairwise force evaluations in multi-substep integration.
 - **Upper-Triangle Adaptive Timestepping**: Vectorized timescale calculations using upper-triangle indices without full-matrix temporaries or diagonal masking overhead.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
@@ -172,7 +172,7 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 
 ## Performance & Scalability
 
-NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine with zero compromise to numerical accuracy ($< 10^{-15}$ relative error):
+NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
 
 - **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
 - **Verlet Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps during adaptive timestepping.
@@ -193,7 +193,10 @@ Measured on Windows 11 / Python 3.12 / NumPy 2.x via `scripts/benchmark_scalabil
 | **250** | 116.2 | 232.4 | 258.2 ms | 6.7% | < 1% | 2,758.5 KB |
 | **500** | 25.7 | 67.8 | 1,165.9 ms | 10.3% | 2.7% | 10,882.8 KB |
 
-*Note: For the 39-body Solar System, the presence of closely orbiting moons (e.g. Jovian and Saturnian satellites) activates adaptive substeps (~200 substeps per day step), resulting in 8,307.6 substeps/s.*
+*Benchmark Methodology & Workload Classes*:
+- **Workload Classes**: The scalability benchmark uses two workload classes: the 39-body default Solar System for a realistic application workload, and deterministic synthetic star-centric systems for controlled N-scaling measurements. The synthetic systems serve as performance benchmarking workloads rather than physically validated multi-body equilibria.
+- **Adaptive Substep Dynamic**: For the 39-body Solar System, closely orbiting moons (e.g., Jovian and Saturnian satellites) activate adaptive substeps (~200 substeps per 1-day step), resulting in 8,307.6 substeps/s.
+- **Workload Tiers & N=1000 Status**: The standard benchmark suite evaluates $N \in [2, 10, 39, 100, 250, 500]$. Testing $N=1000$ is an optional stress workload and is substantially more computationally expensive under direct $O(N^2)$ summation.
 
 ---
 

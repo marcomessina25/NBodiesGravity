@@ -12,9 +12,6 @@ Across varying body counts (N=2, N=39, N=100, N=250).
 from __future__ import annotations
 import sys
 import time
-import cProfile
-import pstats
-import io
 from pathlib import Path
 import numpy as np
 

@@ -2,7 +2,7 @@
 
 **Branch:** `v08`  
 **Target:** `main`  
-**Status:** 🟠 Very close to PR-ready  
+**Status:** 🟢 PR-ready (All verification items complete)  
 **Purpose:** Final cleanup and verification only. No architectural rewrite is recommended.
 
 ---
@@ -422,58 +422,58 @@ Confirm the working tree is clean.
 # 9. PR Readiness Checklist
 
 ## Code
-- [ ] Acceleration reuse reviewed
-- [ ] Upper-triangle adaptive timestep reviewed
-- [ ] Snapshot architecture reviewed
-- [ ] OpenGL uniform caching reviewed
-- [ ] Horizons/cache optimization reviewed
-- [ ] No unrelated changes
+- [x] Acceleration reuse reviewed
+- [x] Upper-triangle adaptive timestep reviewed
+- [x] Snapshot architecture reviewed
+- [x] OpenGL uniform caching reviewed
+- [x] Horizons/cache optimization reviewed
+- [x] No unrelated changes
 
 ## Numerical correctness
-- [ ] Full pytest passes
-- [ ] Conservation tests pass
-- [ ] Convergence tests pass
-- [ ] Softening validation passes
-- [ ] Orbital tests pass
-- [ ] Collision tests pass
-- [ ] Acceleration-reuse equivalence test passes
-- [ ] No NaN/Inf/integrity failures
+- [x] Full pytest passes
+- [x] Conservation tests pass
+- [x] Convergence tests pass
+- [x] Softening validation passes
+- [x] Orbital tests pass
+- [x] Collision tests pass
+- [x] Acceleration-reuse equivalence test passes
+- [x] No NaN/Inf/integrity failures
 
 ## Performance
-- [ ] Baseline benchmark recorded
-- [ ] v0.8 benchmark reproduced
-- [ ] N=39 realistic workload measured
-- [ ] Synthetic scaling workloads measured
-- [ ] Memory characterized
-- [ ] Diagnostics overhead characterized
-- [ ] Snapshot overhead characterized
-- [ ] Rendering performance checked
-- [ ] Performance regression tests pass
+- [x] Baseline benchmark recorded
+- [x] v0.8 benchmark reproduced
+- [x] N=39 realistic workload measured
+- [x] Synthetic scaling workloads measured
+- [x] Memory characterized
+- [x] Diagnostics overhead characterized
+- [x] Snapshot overhead characterized
+- [x] Rendering performance checked
+- [x] Performance regression tests pass
 
 ## Diagnostics/UI
-- [ ] Drift badges work
-- [ ] Time-window selector works
-- [ ] Plot decimation works
-- [ ] Refresh throttling works
-- [ ] Diagnostics remain responsive
+- [x] Drift badges work
+- [x] Time-window selector works
+- [x] Plot decimation works
+- [x] Refresh throttling works
+- [x] Diagnostics remain responsive
 
 ## Documentation
-- [ ] README numerical claims qualified
-- [ ] Synthetic benchmark methodology explained
-- [ ] N=1000 status clarified
-- [ ] v0.8 spec matches implementation
-- [ ] Roadmap updated
-- [ ] Version strings consistent
-- [ ] No stale v0.7/v0.8 wording
+- [x] README numerical claims qualified
+- [x] Synthetic benchmark methodology explained
+- [x] N=1000 status clarified
+- [x] v0.8 spec matches implementation
+- [x] Roadmap updated
+- [x] Version strings consistent
+- [x] No stale v0.7/v0.8 wording
 
 ## Release hygiene
-- [ ] Full pytest result recorded
-- [ ] Manual smoke test completed
-- [ ] `git diff` reviewed
-- [ ] No temporary files
-- [ ] No debug code
-- [ ] Clean working tree
-- [ ] PR description prepared
+- [x] Full pytest result recorded
+- [x] Manual smoke test completed
+- [x] `git diff` reviewed
+- [x] No temporary files
+- [x] No debug code
+- [x] Clean working tree
+- [x] PR description prepared
 
 ---
 
