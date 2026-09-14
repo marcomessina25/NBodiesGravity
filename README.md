@@ -184,6 +184,8 @@ docs/
         v06.md                   # v0.6.0 numerical robustness specification
         v07.md                   # v0.7.0 scientific diagnostics and orbital analysis specification
         v07_items_left.md        # v0.7.0 pre-PR checklist and verification tracking
+        v08.md                   # v0.8.0 performance and scalability specification
+        v09.md                   # v0.9.0 advanced simulation capabilities specification
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
