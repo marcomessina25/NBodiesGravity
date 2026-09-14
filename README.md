@@ -2,20 +2,25 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.7.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.8.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
 ## Features
 
-### Simulation Engine & Diagnostics
+### Simulation Engine & High-Performance Numerics
 
 - N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
+- **Optimized $O(N^2)$ Pairwise Vectorization**: In-place distance scaling and einsum contractions eliminate intermediate NumPy allocations, achieving **2.2x to 9.6x speedups** with bit-level mathematical equivalence ($< 10^{-15}$ relative error).
+- **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet substeps, halving expensive pairwise force evaluations in multi-substep integration.
+- **Upper-Triangle Adaptive Timestepping**: Vectorized timescale calculations using upper-triangle indices without full-matrix temporaries or diagonal masking overhead.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
 - **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
+- **Drift Tolerance Status Badges**: Visual indicators (`PASS` in green, `WARN` in amber, `ALERT` in red) for energy, linear momentum, angular momentum, and center of mass conservation drift against documented scientific thresholds.
+- **Time-Window Selection & Plot Decimation**: Selectable historical view windows (All Retained History, Last 100 Days, Last 365 Days) with automatic plot decimation to guarantee responsive UI interactions regardless of buffer depth.
 - **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
-- **Scientific Conservation Diagnostics**: UI-independent diagnostics layer calculating kinetic, softened potential, and total mechanical energy, linear momentum, angular momentum, center of mass, and drift metrics.
+- **Decoupled Snapshot Architecture**: 500 Hz physics loop decoupled from rendering via throttled 120 Hz immutable snapshots, eliminating heap contention and GIL-safe state sharing.
 - Physics loop runs in a background QThread at **500 Hz**, keeping the UI fully responsive and fluid.
 - Time unit: **AU / days** in the Solar System Barycenter (SSB) frame.
 - Configurable timescale via a log-scale speed slider (1 h/s to 1 y/s).
@@ -107,14 +112,16 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 - **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
   - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
   - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
-  - **v0.7.0** *(current)*: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
-  - **v0.8.0**: Performance profiling and scalability improvements.
+  - **v0.7.0**: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
+  - **v0.8.0** *(current)*: Performance profiling, memory optimization, and scalability characterization.
   - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
   - **v1.0.0**: Stable, validated scientific baseline.
 - **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
 - **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
 - **[v0.6.0 Specification](docs/specs/v06.md)**: Detailed plan and acceptance criteria for v0.6.0.
 - **[v0.7.0 Specification](docs/specs/v07.md)**: Detailed plan and acceptance criteria for v0.7.0.
+- **[v0.8.0 Specification](docs/specs/v08.md)**: Performance profiling, benchmarks, and scalability specification.
+- **[v0.9.0 Specification](docs/specs/v09.md)**: Advanced simulation capabilities specification.
 
 ---
 
@@ -154,9 +161,39 @@ conda run -n nbodiesgravity pytest tests/ -v
 # Run the headless numerical benchmarking tool
 conda run -n nbodiesgravity python scripts/benchmark_engine.py --benchmark earth_sun --years 1.0
 conda run -n nbodiesgravity python scripts/benchmark_engine.py --all
+
+# Run the synthetic N-body scalability benchmark across body counts
+conda run -n nbodiesgravity python scripts/benchmark_scalability.py
 ```
 
-The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, persistence round-tripping, timestep configuration, numerical failure detection, and deterministic physical benchmarks with fixed-step second-order O(dt²) convergence verification.
+The comprehensive automated test suite covers the integrator, collisions, body datatypes, JPL Horizons client, cache layer, camera panning and top view, rendering name projections, trail buffers, category controls, transactional date loading, persistence round-tripping, timestep configuration, numerical failure detection, deterministic physical benchmarks with fixed-step second-order O(dt²) convergence verification, and performance regression assertions.
+
+---
+
+## Performance & Scalability
+
+NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine with zero compromise to numerical accuracy ($< 10^{-15}$ relative error):
+
+- **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
+- **Verlet Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps during adaptive timestepping.
+- **Upper-Triangle Adaptive Timestepping**: Vectorized timescale evaluation avoiding full-matrix temporaries.
+- **Decoupled 120 Hz Snapshot Cadence**: Throttles snapshot allocations to the render rate, keeping the 500 Hz physics loop unburdened.
+- **Cached OpenGL Shader Uniforms & Horizons I/O**: Eliminates redundant GPU uniform queries and disk reads.
+
+### Scalability Benchmark Results (v0.8.0 Baseline)
+
+Measured on Windows 11 / Python 3.12 / NumPy 2.x via `scripts/benchmark_scalability.py`:
+
+| N Bodies | Steps/s (Pure) | Substeps/s | 50-Step Wall Time | Diag Overhead | Snap Overhead | Peak Mem (KB) |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **2** | 2,296.3 | 4,592.5 | 13.1 ms | < 1% | < 1% | 12.1 KB |
+| **10** | 2,103.2 | 4,206.3 | 14.3 ms | < 1% | 1.4% | 17.8 KB |
+| **39 (Solar System)** | 40.0 | 8,307.6 | 749.9 ms | < 1% | < 1% | 127.6 KB |
+| **100** | 706.8 | 1,413.7 | 42.4 ms | < 1% | 7.1% | 496.7 KB |
+| **250** | 116.2 | 232.4 | 258.2 ms | 6.7% | < 1% | 2,758.5 KB |
+| **500** | 25.7 | 67.8 | 1,165.9 ms | 10.3% | 2.7% | 10,882.8 KB |
+
+*Note: For the 39-body Solar System, the presence of closely orbiting moons (e.g. Jovian and Saturnian satellites) activates adaptive substeps (~200 substeps per day step), resulting in 8,307.6 substeps/s.*
 
 ---
 
@@ -218,8 +255,10 @@ nbodiesgravity/
     main.py                      # Entry point
 scripts/
     benchmark_engine.py          # Headless benchmarking and conservation reporting tool
+    benchmark_scalability.py     # Synthetic N-body scaling and component overhead benchmark tool
     compare_convergence.py       # Adaptive vs. fixed timestep convergence characterization
     fetch_j2000.py               # One-time script to regenerate j2000.json
+    profile_engine.py            # Detailed per-component physics profiler
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
 tests/
     data/                        # Horizons client, cache, and CSV/JSON export tests

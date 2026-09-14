@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from pathlib import Path
 
+from nbodiesgravity import __version__
 from nbodiesgravity.engine.body import CelestialBody
 from nbodiesgravity.engine.diagnostics import ConservationTracker, DiagnosticsHistoryBuffer
 from nbodiesgravity.engine.orbital_elements import compute_orbital_elements
@@ -68,7 +69,7 @@ def test_export_conservation_history_json(sample_history, tmp_path):
     with open(json_file, encoding="utf-8") as f:
         data = json.load(f)
 
-    assert data["version"] == "0.7.0"
+    assert data["version"] == __version__
     assert data["point_count"] == 3
     assert len(data["series"]["times"]) == 3
     assert data["series"]["times"] == [0.0, 1.0, 2.0]
@@ -96,7 +97,7 @@ def test_export_orbital_elements_csv_and_json(sample_elements, tmp_path):
     with open(json_file, encoding="utf-8") as f:
         data = json.load(f)
 
-    assert data["version"] == "0.7.0"
+    assert data["version"] == __version__
     assert "Earth" in data["bodies"]
     assert "Comet" in data["bodies"]
     assert data["bodies"]["Earth"]["is_bound"] is True

@@ -51,6 +51,7 @@ class SimulationThread(QThread):
         self._history = DiagnosticsHistoryBuffer(max_points=2000)
         self._latest_report: DiagnosticReport | None = None
         self._last_diag_time: float = 0.0
+        self._last_snap_time: float = 0.0
 
     @property
     def is_playing(self) -> bool:
@@ -120,6 +121,7 @@ class SimulationThread(QThread):
             sim_dt = real_dt * self._timescale
 
             collisions: list = []
+            publish_snap = (t_now - self._last_snap_time >= 0.008)  # ~120 Hz render cadence
             try:
                 with self._lock:
                     remaining = sim_dt
@@ -127,15 +129,22 @@ class SimulationThread(QThread):
                         step_dt = min(remaining, _MAX_SIM_DT)
                         collisions.extend(self._system.step(step_dt))
                         remaining -= step_dt
-                    snap = self._system.snapshot()
+                    if publish_snap or collisions:
+                        snap = self._system.snapshot()
             except NumericalIntegrityError as exc:
                 self._paused = True
                 self.numerical_failure_detected.emit(str(exc))
                 continue
 
             self._elapsed_days += sim_dt
-            self.latest_snapshot = snap
-            self.snapshot_ready.emit(snap)
+            if publish_snap or collisions:
+                self.latest_snapshot = snap
+                self._last_snap_time = t_now
+                if self.receivers(self.snapshot_ready) > 0:
+                    self.snapshot_ready.emit(snap)
+            else:
+                snap = self.latest_snapshot
+
             if collisions:
                 self.collisions_detected.emit(collisions)
 

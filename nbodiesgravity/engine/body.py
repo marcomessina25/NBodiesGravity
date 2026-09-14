@@ -19,6 +19,7 @@ class BodyState(NamedTuple):
     color: tuple[float, float, float] = (1.0, 1.0, 1.0)
     label: str = "planet"
     show_name: bool = True
+    show_trail: bool = True
 
 
 class CollisionEvent(NamedTuple):
@@ -57,4 +58,5 @@ class CelestialBody:
             color=self.color,
             label=self.label,
             show_name=self.show_name,
+            show_trail=self.show_trail,
         )

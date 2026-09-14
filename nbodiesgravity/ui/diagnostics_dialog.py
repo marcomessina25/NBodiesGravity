@@ -28,6 +28,39 @@ from nbodiesgravity.data.export import (
 if TYPE_CHECKING:
     from nbodiesgravity.engine.simulation_thread import SimulationThread
 
+# Scientific tolerance thresholds for numerical drift status badges
+TOL_ENERGY_PASS = 1e-4        # |ΔE/E₀| < 0.01% -> PASS (green)
+TOL_ENERGY_WARN = 1e-2        # |ΔE/E₀| < 1.0%  -> WARN (amber), >= 1.0% -> ALERT (red)
+
+TOL_LINEAR_MOM_PASS = 1e-4    # Normalized momentum drift < 1e-4 -> PASS
+TOL_LINEAR_MOM_WARN = 1e-2    # < 1e-2 -> WARN, >= 1e-2 -> ALERT
+
+TOL_ANGULAR_MOM_PASS = 1e-4   # |ΔL/L₀| < 1e-4 -> PASS
+TOL_ANGULAR_MOM_WARN = 1e-2   # < 1e-2 -> WARN, >= 1e-2 -> ALERT
+
+TOL_COM_PASS = 1e-4           # Center of mass drift < 1e-4 AU -> PASS
+TOL_COM_WARN = 1e-2           # < 1e-2 AU -> WARN, >= 1e-2 AU -> ALERT
+
+MAX_PLOT_POINTS = 1000        # Display decimation limit to keep UI responsive
+
+
+def _make_badge(val: float, tol_pass: float, tol_warn: float) -> str:
+    """Generate styled HTML status badge (PASS / WARN / ALERT) based on drift magnitude."""
+    abs_val = abs(val)
+    if abs_val < tol_pass:
+        color = "#2ecc71"
+        bg = "#1e4620"
+        text = "PASS"
+    elif abs_val < tol_warn:
+        color = "#f39c12"
+        bg = "#543806"
+        text = "WARN"
+    else:
+        color = "#e74c3c"
+        bg = "#4c1d1d"
+        text = "ALERT"
+    return f"<span style='color:{color}; background-color:{bg}; padding:1px 5px; border-radius:3px; font-weight:bold; font-size:8pt;'>{text}</span>"
+
 
 class ScientificDiagnosticsDialog(QDialog):
     """Non-modal diagnostic inspection and orbital analysis laboratory."""
@@ -295,6 +328,13 @@ class ScientificDiagnosticsDialog(QDialog):
         layout.addWidget(self._canvas, stretch=1)
 
         btn_bar = QHBoxLayout()
+        btn_bar.addWidget(QLabel("Time Window:"))
+        self._combo_time_window = QComboBox()
+        self._combo_time_window.addItems(["All Retained History", "Last 100 Days", "Last 365 Days (1 Year)"])
+        self._combo_time_window.currentIndexChanged.connect(self._update_plots)
+        btn_bar.addWidget(self._combo_time_window)
+
+        btn_bar.addSpacing(16)
         btn_clear_plots = QPushButton("Clear Plot Buffer")
         btn_clear_plots.clicked.connect(self._clear_plot_history)
         btn_bar.addWidget(btn_clear_plots)
@@ -379,22 +419,28 @@ class ScientificDiagnosticsDialog(QDialog):
         self._lbl_potential_energy.setText(f"{curr.potential_energy:+.8e} AU² kg day⁻²")
 
         rel_e = report.energy_drift.rel_drift
-        badge_color = "#2ecc71" if abs(rel_e) < 1e-4 else ("#f39c12" if abs(rel_e) < 1e-2 else "#e74c3c")
+        badge_e = _make_badge(rel_e, TOL_ENERGY_PASS, TOL_ENERGY_WARN)
         self._lbl_energy_drift.setText(
-            f"<span style='color:{badge_color}; font-weight:bold;'>{rel_e:+.4e} ({rel_e * 100.0:+.4f}%)</span>"
+            f"<b>{rel_e:+.4e}</b> ({rel_e * 100.0:+.4f}%) &nbsp; {badge_e}"
         )
 
         p_norm = float(np.linalg.norm(curr.linear_momentum))
         self._lbl_linear_mom.setText(f"{p_norm:.6e} AU kg day⁻¹")
-        self._lbl_linear_drift.setText(f"{report.normalized_momentum_drift:.4e}")
+        p_drift = report.normalized_momentum_drift
+        badge_p = _make_badge(p_drift, TOL_LINEAR_MOM_PASS, TOL_LINEAR_MOM_WARN)
+        self._lbl_linear_drift.setText(f"<b>{p_drift:.4e}</b> &nbsp; {badge_p}")
 
         l_norm = float(np.linalg.norm(curr.angular_momentum))
         self._lbl_angular_mom.setText(f"{l_norm:.6e} AU² kg day⁻¹")
-        self._lbl_angular_drift.setText(f"{report.angular_momentum_drift.rel_drift:+.4e}")
+        l_drift = report.angular_momentum_drift.rel_drift
+        badge_l = _make_badge(l_drift, TOL_ANGULAR_MOM_PASS, TOL_ANGULAR_MOM_WARN)
+        self._lbl_angular_drift.setText(f"<b>{l_drift:+.4e}</b> &nbsp; {badge_l}")
 
         cm = curr.center_of_mass
         self._lbl_center_of_mass.setText(f"[{cm[0]:+.4e}, {cm[1]:+.4e}, {cm[2]:+.4e}] AU")
-        self._lbl_com_drift.setText(f"{report.center_of_mass_drift.abs_drift:.4e} AU")
+        cm_drift = report.center_of_mass_drift.abs_drift
+        badge_cm = _make_badge(cm_drift, TOL_COM_PASS, TOL_COM_WARN)
+        self._lbl_com_drift.setText(f"<b>{cm_drift:.4e} AU</b> &nbsp; {badge_cm}")
 
         self._lbl_last_substeps.setText(f"{self._sim.system.last_substeps} substeps")
         self._lbl_cum_substeps.setText(f"{self._sim.system.cumulative_substeps:,} substeps")
@@ -481,6 +527,36 @@ class ScientificDiagnosticsDialog(QDialog):
         if len(times) < 2:
             return
 
+        window_mode = self._combo_time_window.currentText() if hasattr(self, "_combo_time_window") else "All Retained History"
+        if window_mode == "Last 100 Days":
+            mask = times >= (times[-1] - 100.0)
+        elif window_mode == "Last 365 Days (1 Year)":
+            mask = times >= (times[-1] - 365.0)
+        else:
+            mask = np.ones(len(times), dtype=bool)
+
+        times_win = times[mask]
+        if len(times_win) < 2:
+            times_win = times[-2:]
+            mask = np.zeros(len(times), dtype=bool)
+            mask[-2:] = True
+
+        n_pts = len(times_win)
+        if n_pts > MAX_PLOT_POINTS:
+            step = int(np.ceil(n_pts / MAX_PLOT_POINTS))
+            indices = np.arange(0, n_pts, step)
+            if indices[-1] != n_pts - 1:
+                indices = np.append(indices, n_pts - 1)
+        else:
+            indices = slice(None)
+
+        t_plot = times_win[indices]
+        e_plot = data["energy_rel_drift"][mask][indices]
+        p_plot = data["momentum_norm_drift"][mask][indices]
+        l_plot = data["angular_momentum_rel_drift"][mask][indices]
+        sub_plot = data["substeps"][mask][indices]
+        dt_plot = data["adaptive_dt"][mask][indices]
+
         self._ax_energy.clear()
         self._ax_momentum.clear()
         self._ax_adaptive.clear()
@@ -493,17 +569,17 @@ class ScientificDiagnosticsDialog(QDialog):
         self._ax_adaptive.set_xlabel("Elapsed Time (days)", color="#cccccc", fontsize=9)
 
         # Plot energy drift
-        self._ax_energy.plot(times, data["energy_rel_drift"], color="#00d4ff", linewidth=1.5, label="ΔE/E₀")
+        self._ax_energy.plot(t_plot, e_plot, color="#00d4ff", linewidth=1.5, label="ΔE/E₀")
         self._ax_energy.legend(loc="upper right", facecolor="#1e1e1e", edgecolor="#555555", labelcolor="#ffffff", fontsize=8)
 
         # Plot linear and angular momentum drift
-        self._ax_momentum.plot(times, data["momentum_norm_drift"], color="#ff9900", linewidth=1.5, label="Linear Norm ΔP")
-        self._ax_momentum.plot(times, data["angular_momentum_rel_drift"], color="#00ff88", linewidth=1.5, label="Angular ΔL/L₀")
+        self._ax_momentum.plot(t_plot, p_plot, color="#ff9900", linewidth=1.5, label="Linear Norm ΔP")
+        self._ax_momentum.plot(t_plot, l_plot, color="#00ff88", linewidth=1.5, label="Angular ΔL/L₀")
         self._ax_momentum.legend(loc="upper right", facecolor="#1e1e1e", edgecolor="#555555", labelcolor="#ffffff", fontsize=8)
 
         # Plot adaptive integration: substeps per step and selected dt
-        line1 = self._ax_adaptive.plot(times, data["substeps"], color="#f1c40f", linewidth=1.5, label="Substeps")
-        line2 = self._ax_adaptive_dt.plot(times, data["adaptive_dt"], color="#e056fd", linewidth=1.5, linestyle="--", label="Adaptive dt")
+        line1 = self._ax_adaptive.plot(t_plot, sub_plot, color="#f1c40f", linewidth=1.5, label="Substeps")
+        line2 = self._ax_adaptive_dt.plot(t_plot, dt_plot, color="#e056fd", linewidth=1.5, linestyle="--", label="Adaptive dt")
         lines = line1 + line2
         labels = [line.get_label() for line in lines]
         self._ax_adaptive.legend(lines, labels, loc="upper right", facecolor="#1e1e1e", edgecolor="#555555", labelcolor="#ffffff", fontsize=8)
