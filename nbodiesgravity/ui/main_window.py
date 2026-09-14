@@ -89,6 +89,9 @@ class MainWindow(QMainWindow):
         self._body_list.category_active_toggled.connect(self._on_category_active_toggled)
         self._body_list.category_trail_toggled.connect(self._on_category_trail_toggled)
         self._body_list.category_name_toggled.connect(self._on_category_name_toggled)
+        self._ctrl.diagnostics_requested.connect(self._open_diagnostics)
+
+        self._diag_dialog = None
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -112,6 +115,23 @@ class MainWindow(QMainWindow):
         self._action_show_names.setCheckable(True)
         self._action_show_names.setChecked(True)
         self._action_show_names.triggered.connect(self._on_show_names_toggled)
+
+        dm = mb.addMenu("&Diagnostics")
+        self._action_open_diag = dm.addAction("Scientific Diagnostics & Analysis…", self._open_diagnostics)
+        self._action_open_diag.setShortcut("Ctrl+D")
+
+    def _open_diagnostics(self) -> None:
+        if self._diag_dialog is None:
+            from nbodiesgravity.ui.diagnostics_dialog import ScientificDiagnosticsDialog
+            self._diag_dialog = ScientificDiagnosticsDialog(self._sim, self)
+        else:
+            self._diag_dialog._sim = self._sim
+            self._diag_dialog._populate_body_combos()
+            self._diag_dialog._update_conservation_view()
+            self._diag_dialog._update_orbital_view()
+        self._diag_dialog.show()
+        self._diag_dialog.raise_()
+        self._diag_dialog.activateWindow()
 
     # ----------------------------------------------------------------
     # System management
@@ -146,6 +166,12 @@ class MainWindow(QMainWindow):
         self._ctrl.set_sim_date("–")
         self._date_timer.start()
         self._sim.start()
+        if self._diag_dialog is not None:
+            self._diag_dialog._sim = self._sim
+            self._sim.diagnostics_ready.connect(self._diag_dialog._on_diagnostics_ready)
+            self._diag_dialog._populate_body_combos()
+            self._diag_dialog._update_conservation_view()
+            self._diag_dialog._update_orbital_view()
         self.statusBar().showMessage(f"Loaded {len(system.bodies)} bodies.")
 
     # ----------------------------------------------------------------

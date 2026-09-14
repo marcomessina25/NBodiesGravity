@@ -19,8 +19,8 @@ Always execute all Python commands within the `nbodiesgravity` environment using
     ```
 
 ### 2. Version Controls & Dependencies
-*   **Version:** v0.6.0 (semantic versioning baseline v0.6.0).
-*   **Stack:** Python 3.12, PyQt6 (6.5+), PyOpenGL, NumPy (pure vectorized calculations), Requests (for JPL Horizons queries), and `responses` (for testing).
+*   **Version:** v0.7.0 (semantic versioning baseline v0.7.0).
+*   **Stack:** Python 3.12, PyQt6 (6.5+), PyOpenGL, NumPy (pure vectorized calculations), Matplotlib, Requests (for JPL Horizons queries), and `responses` (for testing).
 *   **Freeze Policy:** Do not introduce new Python or system dependencies without explicit user confirmation. If a new library is approved, update the conda configuration in `environment.yml` immediately.
 
 ### 3. Git Branching Policy

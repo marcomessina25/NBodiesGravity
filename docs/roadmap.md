@@ -94,12 +94,13 @@ The current branch is therefore **not a rewrite or foundational implementation p
 | **v0.9.0** | Advanced simulation capabilities | More sophisticated initial conditions, integration options and physical models |
 | **v1.0.0** | Stable scientific application | Stable public baseline with documented limitations and validated core behavior |
 
-The detailed implementation documents currently defined are:
+The detailed implementation documents and architectural contracts currently defined are:
 
-- `docs/v05.md`
-- `docs/v06.md`
-
-Detailed plans for later releases should be created when the preceding release is complete and its actual implementation results are known.
+- [`specs/v05.md`](specs/v05.md) — v0.5.0 baseline stabilization
+- [`specs/v06.md`](specs/v06.md) — v0.6.0 numerical robustness & validation
+- [`specs/v07.md`](specs/v07.md) — v0.7.0 scientific diagnostics & orbital analysis
+- [`specs/v08.md`](specs/v08.md) — v0.8.0 performance, scalability & runtime efficiency
+- [`specs/v09.md`](specs/v09.md) — v0.9.0 advanced simulation capabilities & pre-v1.0 hardening
 
 ---
 
@@ -113,7 +114,7 @@ This release should **not** introduce major new features. It should finish the c
 
 ### Detailed plan
 
-See [`v05.md`](v05.md).
+See [`specs/v05.md`](specs/v05.md).
 
 ### Required work
 
@@ -159,7 +160,7 @@ The simulator already uses Velocity Verlet and adaptive timestep control, but th
 
 ### Detailed plan
 
-See [`v06.md`](v06.md).
+See [`specs/v06.md`](specs/v06.md).
 
 ### Main workstreams
 
@@ -198,6 +199,10 @@ Expose the numerical information developed in v0.6 to the user.
 
 The application should move beyond simply showing bodies moving on screen and allow users to inspect the physical behavior of the simulation.
 
+### Detailed plan
+
+See [`specs/v07.md`](specs/v07.md) and [`specs/v07_items_left.md`](specs/v07_items_left.md).
+
 ### Planned capabilities
 
 - total kinetic energy;
@@ -216,7 +221,7 @@ The application should move beyond simply showing bodies moving on screen and al
 - trajectory statistics;
 - numerical diagnostics over time;
 - plots of conserved quantities;
-- export of simulation/diagnostic data.
+- export of diagnostic conservation history and orbital elements data (continuous historical ephemeris/trajectory export deferred to v0.9).
 
 ### Important design rule
 
@@ -228,33 +233,33 @@ Diagnostics should consume the same simulation state used by the physics engine.
 
 ## Objective
 
-Improve performance based on actual profiling rather than premature optimization.
+Make the existing validated simulation engine faster, more predictable at larger body counts, and more efficient in the UI and data-loading paths without changing the physical model.
 
-The current direct O(N²) vectorized implementation is appropriate for the current Solar System-scale body count. It should remain the baseline until measurements demonstrate a need for more.
+The guiding rule is:
+> **Measure first, optimize second, validate continuously.**
 
-### Planned work
+The current direct O(N²) vectorized implementation remains the reference baseline. No optimization should be accepted without reproducible before/after profiling evidence.
 
-- profile the physics loop;
-- profile NumPy allocations;
-- profile snapshot generation;
-- cache OpenGL uniform locations;
-- reduce unnecessary rendering-side access to mutable simulation state;
-- optimize Horizons data loading;
-- consider bounded concurrent Horizons requests;
-- benchmark different body counts;
-- benchmark different timesteps;
-- establish performance regression tests.
+### Detailed plan
 
-Only after those measurements should the project consider:
+See [`specs/v08.md`](specs/v08.md).
 
-- alternative O(N²) kernels;
-- multiprocessing/threading strategies;
-- GPU acceleration;
-- Barnes-Hut or other approximate algorithms.
+### Main workstreams
+
+1. **Profiling infrastructure**: Build a reproducible profiling harness measuring execution time across force calculation, adaptive timestepping, collision handling, simulation-thread loops, OpenGL rendering, Matplotlib plotting, and JPL Horizons data queries.
+2. **Physics-engine optimization**: Optimize the NumPy-vectorized pairwise force calculations, eliminate redundant temporary allocations, optimize broadcasting, and streamline adaptive timestep evaluation while strictly preserving mathematical equivalence.
+3. **Memory & buffer optimization**: Pre-allocate coordinate, velocity, and acceleration buffers in the physics loop to eliminate per-step heap churn and garbage-collection jitter at 500 Hz.
+4. **Snapshot & thread optimization**: Decouple rendering state access from mutable simulation state, optimize snapshot publication frequency, and minimize thread synchronization lock contention.
+5. **Rendering & OpenGL efficiency**: Cache OpenGL uniform locations, optimize VBO streaming, and streamline ring-buffer trail rendering.
+6. **Data loading & Horizons concurrency**: Accelerate multi-body JPL Horizons state-vector queries using bounded concurrent HTTP sessions or connection pooling, maintaining local caching.
+7. **Scalability benchmarks**: Characterize the scaling envelope up to 100+ bodies with new canonical benchmarks (Benchmarks G and H), establishing reproducible scaling baselines.
+8. **Diagnostics UI usability & performance**: Introduce diagnostics drift tolerance badges (color-coded green/amber/red), time-window selection (last 100 days, 1 year, all), and canvas update throttling/data decimation.
+9. **Performance regression tests**: Automated performance assertion benchmarks to prevent throughput regressions in future releases.
+10. **Documentation & release hardening**: Update performance profiles, architectural documentation, and release baseline.
 
 ### Definition of Done
 
-Performance work must demonstrate measurable improvement without reducing numerical correctness.
+Performance work must demonstrate measurable, documented improvement across standard benchmarks without reducing numerical correctness, modifying the physical model, or violating conservation laws.
 
 ---
 
@@ -262,50 +267,33 @@ Performance work must demonstrate measurable improvement without reducing numeri
 
 ## Objective
 
-Add advanced capabilities only after the core numerical and diagnostic infrastructure is trustworthy.
+Turn the validated v0.8 simulation engine into a flexible scientific experiment platform with selectable integrators, analytical initial-condition presets, deterministic replay, and configurable physical models, while keeping the validated default model clearly defined.
 
-Potential scope:
+The guiding rule is:
+> **Experimental capabilities must be selectable, reproducible, testable, and clearly separated from the validated default model.**
 
-### Integrators
+### Detailed plan
 
-Provide a pluggable integration interface allowing controlled comparison between:
+See [`specs/v09.md`](specs/v09.md).
 
-- Velocity Verlet;
-- leapfrog variants;
-- higher-order methods where justified.
+### Main workstreams
 
-### Initial conditions
+1. **Pluggable integrator architecture**: Decouple numerical stepping from `SolarSystem` via an explicit `Integrator` protocol and `IntegratorConfig`. The validated Velocity Verlet implementation remains the default.
+2. **Additional integrators**: Implement second-order symplectic Leapfrog (kick-drift-kick) and justifiable higher-order methods (e.g., RK4) for comparative orbital studies.
+3. **Initial-condition presets**: Scientifically defined analytical presets (two-body circular/eccentric, Earth-Moon, Lagrange equilibrium points L1–L5, figure-8 three-body solution, hierarchical binaries).
+4. **Deterministic checkpoints**: High-precision state serialization capturing exact coordinates, velocities, masses, integrator configuration, and elapsed simulation time.
+5. **Replay & reproducibility**: Full deterministic trajectory replay, checkpoint rewinding, and continuous historical ephemeris/trajectory export.
+6. **Advanced simulation controls**: Single-step forward stepping, bounded target time limits, and reverse integration checks for reversibility verification.
+7. **Configurable physical models**: Selectable gravitational softening models and optional post-Newtonian (1PN) relativistic precession corrections as experimental extensions.
+8. **Collision & merger framework**: Configurable collision outcomes (inelastic mass-conserving merge, elastic bounce, or fragmentation).
+9. **Scientific experiment metadata**: Experiment configuration tracking recording system parameters, integrator tolerances, and git commit provenance for published exports.
+10. **Validation & cross-integrator comparison**: Automated cross-verification test suite comparing energy drift and trajectory error across integrators.
+11. **UI integration**: Preset loader dialog, integrator selector, and checkpoint timeline controls.
+12. **Pre-v1.0 hardening**: Architectural audit, public API stabilization, deprecation cleanups, and final preparation for v1.0.0.
 
-Add reusable presets such as:
+### Definition of Done
 
-- two-body circular orbit;
-- two-body eccentric orbit;
-- Earth-Moon;
-- binary systems;
-- restricted three-body configurations;
-- custom planetary systems.
-
-### Simulation controls
-
-Potential additions:
-
-- single-step forward;
-- configurable integration limits;
-- simulation checkpoints;
-- deterministic replay;
-- rewind from checkpoints;
-- improved reset semantics.
-
-### Physical models
-
-Only where justified by the project goals:
-
-- configurable softening;
-- selectable collision models;
-- center-of-mass-aware merging;
-- optional relativistic corrections as a separate experimental model.
-
-Experimental physics should be clearly separated from the validated baseline.
+v0.9 is ready when alternative integrators, presets, and replay controls are fully functional, thoroughly tested against analytical benchmarks, and the default physical baseline remains completely unaffected when experimental features are inactive.
 
 ---
 
@@ -521,8 +509,8 @@ tag v0.6.0
 
 | Document | Release | Purpose |
 |---|---|---|
-| [`v05.md`](v05.md) | v0.5.0 | Detailed implementation plan for finishing `feature_v5` and preparing the PR to `main` |
-| [`v06.md`](v06.md) | v0.6.0 | Detailed implementation plan for numerical robustness and validation |
-| `v07.md` | v0.7.0 | To be created when v0.6.0 is complete |
+| [`v05.md`](specs/v05.md) | v0.5.0 | Detailed implementation plan for finishing `feature_v5` and preparing the PR to `main` |
+| [`v06.md`](specs/v06.md) | v0.6.0 | Detailed implementation plan for numerical robustness and validation |
+| [`v07.md`](specs/v07.md) | v0.7.0 | Detailed implementation plan for scientific diagnostics, orbital analysis, and physical visualization |
 | `v08.md` | v0.8.0 | To be created when v0.7.0 is complete |
 | `v09.md` | v0.9.0 | To be created when v0.8.0 is complete |

@@ -2,16 +2,17 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.6.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.7.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
 ## Features
 
-### Simulation Engine
+### Simulation Engine & Diagnostics
 
 - N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
+- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
 - **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
 - **Scientific Conservation Diagnostics**: UI-independent diagnostics layer calculating kinetic, softened potential, and total mechanical energy, linear momentum, angular momentum, center of mass, and drift metrics.
@@ -105,14 +106,15 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 
 - **[Master Development Roadmap](docs/roadmap.md)**: Release plan and architectural principles across releases:
   - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
-  - **v0.6.0** *(current)*: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
-  - **v0.7.0**: Scientific diagnostics, orbital element analysis, and physical plotting.
+  - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
+  - **v0.7.0** *(current)*: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
   - **v0.8.0**: Performance profiling and scalability improvements.
   - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
   - **v1.0.0**: Stable, validated scientific baseline.
 - **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
 - **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
 - **[v0.6.0 Specification](docs/specs/v06.md)**: Detailed plan and acceptance criteria for v0.6.0.
+- **[v0.7.0 Specification](docs/specs/v07.md)**: Detailed plan and acceptance criteria for v0.7.0.
 
 ---
 
@@ -180,17 +182,23 @@ docs/
     specs/
         v05.md                   # v0.5.0 implementation specification
         v06.md                   # v0.6.0 numerical robustness specification
+        v07.md                   # v0.7.0 scientific diagnostics and orbital analysis specification
+        v07_items_left.md        # v0.7.0 pre-PR checklist and verification tracking
+        v08.md                   # v0.8.0 performance and scalability specification
+        v09.md                   # v0.9.0 advanced simulation capabilities specification
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
-        diagnostics.py           # Reusable scientific conservation metrics (energy, momentum, CM)
+        diagnostics.py           # Reusable scientific conservation metrics and DiagnosticsHistoryBuffer
         exceptions.py            # NumericalIntegrityError and budget exceptions
         integrator.py            # Vectorized pairwise Velocity Verlet integrator with softening
+        orbital_elements.py      # Pure-NumPy Keplerian orbital elements solver and primary detection
         system.py                # SolarSystem — step, snapshot, TimeStepConfig, collision resolution
         simulation_thread.py     # QThread physics loop (500 Hz loop, real-time synchronized)
     data/
         cache.py                 # Local JSON cache for Horizons results
+        export.py                # Scientific data export (CSV and JSON for conservation and orbital elements)
         horizons.py              # JPL Horizons REST client
         loader.py                # load_default_system / load_system_at_date
         snapshots/j2000.json     # Bundled J2000 snapshot (39 standard bodies)
@@ -205,17 +213,19 @@ nbodiesgravity/
         body_list_panel.py       # Sidebar with Category Controls and body list
         control_panel.py         # Bottom control bar: date, speed, center, top view, play/pause
         date_loader_worker.py    # QThread for background JPL Horizons fetch
+        diagnostics_dialog.py    # Non-modal scientific diagnostics, live Matplotlib plots, and export dialog
         main_window.py           # Top-level window assembly and signal wiring
     main.py                      # Entry point
 scripts/
     benchmark_engine.py          # Headless benchmarking and conservation reporting tool
+    compare_convergence.py       # Adaptive vs. fixed timestep convergence characterization
     fetch_j2000.py               # One-time script to regenerate j2000.json
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
 tests/
-    data/                        # Horizons client and cache tests
-    engine/                      # Integrator, system, collisions, timestep, and failure tests
+    data/                        # Horizons client, cache, and CSV/JSON export tests
+    engine/                      # Integrator, system, orbital elements, diagnostics history, collisions, and timestep tests
     rendering/                   # OpenGL, camera, shaders, and trail buffer tests
-    ui/                          # PyQt widget, transaction, and persistence tests
+    ui/                          # PyQt widget, diagnostics panel, transaction, and persistence tests
     validation/                  # Physical conservation, benchmarks A-F, convergence, and softening tests
 environment.yml
 ```
