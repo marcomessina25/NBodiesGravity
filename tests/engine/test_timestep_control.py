@@ -12,6 +12,8 @@ def test_timestep_config_defaults():
     assert config.max_dt == 1.0
     assert config.safety_factor == 0.01
     assert config.max_substeps == 10_000
+    assert "Default is 10,000." in (TimeStepConfig.__doc__ or "")
+    assert "Default is 1000" not in (TimeStepConfig.__doc__ or "")
 
 
 def test_timestep_config_validation():
@@ -107,3 +109,57 @@ def test_invalid_dt_rejected():
 
     with pytest.raises(NumericalIntegrityError, match="Step dt must be finite"):
         system.step(float("inf"))
+
+
+def test_adaptive_timestep_recalculated_between_outer_steps(monkeypatch):
+    """Clarifies that adaptive timestep selection is recalculated between outer SolarSystem.step() calls."""
+    import nbodiesgravity.engine.system as system_module
+
+    recorded_calls: list[dict] = []
+    real_compute = system_module.compute_adaptive_dt
+
+    def spy_compute_adaptive_dt(positions, masses, config=None):
+        dt = real_compute(positions, masses, config)
+        recorded_calls.append({
+            "positions": positions.copy(),
+            "masses": masses.copy(),
+            "config": config,
+            "dt": dt,
+        })
+        return dt
+
+    monkeypatch.setattr(system_module, "compute_adaptive_dt", spy_compute_adaptive_dt)
+
+    star = CelestialBody("Star", 1.989e30, np.array([0.0, 0.0, 0.0]), np.zeros(3), 1.0, (1.0, 1.0, 0.0))
+    planet = CelestialBody("Planet", 5.972e24, np.array([0.2, 0.0, 0.0]), np.array([-0.02, 0.0, 0.0]), 1.0, (0.0, 0.0, 1.0))
+    system = SolarSystem([star, planet], timestep_config=TimeStepConfig(min_dt=1e-5, max_dt=1.0, safety_factor=0.01))
+
+    # Outer step 1: dt=0.5 days. Adaptive dt is ~0.326 days, requiring 2 internal substeps.
+    # compute_adaptive_dt must be called once at the start of this outer step, not per substep.
+    system.step(0.5)
+    assert len(recorded_calls) == 1
+    call1 = recorded_calls[0]
+    np.testing.assert_allclose(call1["positions"][1], [0.2, 0.0, 0.0])
+    dt1 = call1["dt"]
+    assert 0.0 < dt1 < 1.0
+
+    # Outer step 2: planet has moved closer to the star during step 1.
+    # Adaptive timestep must be recalculated afresh with the new coordinates.
+    system.step(0.5)
+    assert len(recorded_calls) == 2
+    call2 = recorded_calls[1]
+    # Planet x-coordinate moved inward (closer to origin)
+    assert call2["positions"][1][0] < 0.2
+    dt2 = call2["dt"]
+    # Shorter distance yields shorter orbital timescale proxy, so dt2 must be strictly smaller than dt1
+    assert dt2 < dt1
+
+    # Outer step 3: dynamically updating timestep_config takes effect on the next outer step.
+    system.timestep_config = TimeStepConfig(min_dt=1e-5, max_dt=1.0, safety_factor=0.005)
+    system.step(0.5)
+    assert len(recorded_calls) == 3
+    call3 = recorded_calls[2]
+    dt3 = call3["dt"]
+    assert call3["config"].safety_factor == 0.005
+    assert dt3 < dt2
+
