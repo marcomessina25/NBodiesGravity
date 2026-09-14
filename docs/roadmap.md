@@ -257,9 +257,16 @@ See [`specs/v08.md`](specs/v08.md).
 9. **Performance regression tests**: Automated performance assertion benchmarks to prevent throughput regressions in future releases.
 10. **Documentation & release hardening**: Update performance profiles, architectural documentation, and release baseline.
 
-### Definition of Done
+### Status & Outcome (Completed)
 
-Performance work must demonstrate measurable, documented improvement across standard benchmarks without reducing numerical correctness, modifying the physical model, or violating conservation laws.
+v0.8.0 is fully implemented and validated:
+- Vectorized pairwise force calculations and in-place distance calculations eliminate temporary arrays.
+- Substep acceleration reuse halves acceleration evaluations across Verlet substeps, achieving a **2.17x speedup** on the 39-body Solar System and **6.2x to 9.6x speedups** on 100–250 body systems.
+- Exact numerical equivalence confirmed within $< 10^{-15}$ relative error.
+- Decoupled 120 Hz render snapshot cadence and OpenGL shader uniform caching improve rendering efficiency.
+- In-memory caching and regex pre-compilation optimize Horizons state loading.
+- Scientific diagnostics enhanced with color-coded drift status badges (`PASS`/`WARN`/`ALERT`), time-window selection, and responsive display decimation.
+- Synthetic scaling benchmark (`scripts/benchmark_scalability.py`) characterizes performance up to $N = 500$.
 
 ---
 

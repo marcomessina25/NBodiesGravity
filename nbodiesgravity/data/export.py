@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 import numpy as np
 
+from nbodiesgravity import __version__
 from nbodiesgravity.engine.diagnostics import DiagnosticsHistoryBuffer
 from nbodiesgravity.engine.orbital_elements import OrbitalElements
 
@@ -65,7 +66,7 @@ def export_conservation_history_json(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload: dict[str, Any] = {
-        "version": "0.7.0",
+        "version": __version__,
         "point_count": len(data["times"]),
         "series": {
             k: [float(x) if isinstance(x, (float, np.floating)) else int(x) for x in v]
@@ -151,7 +152,7 @@ def export_orbital_elements_json(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload: dict[str, Any] = {
-        "version": "0.7.0",
+        "version": __version__,
         "bodies": {name: orbital_elements_to_dict(elem) for name, elem in elements_map.items()},
     }
 

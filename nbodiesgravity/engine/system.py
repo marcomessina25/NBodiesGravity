@@ -58,17 +58,17 @@ def compute_adaptive_dt(
     if n < 2:
         return config.max_dt
 
-    # pairwise coordinate difference, shape (N, N, 3)
-    diff = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
-    dist = np.sqrt(np.einsum("ijk,ijk->ij", diff, diff))
-    np.fill_diagonal(dist, np.inf)
-
-    mass_sum = masses[np.newaxis, :] + masses[:, np.newaxis]
+    # Upper-triangle pairs (i < j) avoid redundant comparisons and diagonal infinities
+    i_idx, j_idx = np.triu_indices(n, k=1)
+    diff = positions[i_idx] - positions[j_idx]
+    dist_sq = np.sum(diff * diff, axis=-1)
+    dist_cb = dist_sq * np.sqrt(dist_sq)
+    mass_sum = masses[i_idx] + masses[j_idx]
 
     from .integrator import G_AU_DAY
     
     with np.errstate(divide='ignore', invalid='ignore'):
-        t_orb = 2.0 * np.pi * np.sqrt(dist**3 / (G_AU_DAY * mass_sum + 1e-30))
+        t_orb = 2.0 * np.pi * np.sqrt(dist_cb / (G_AU_DAY * mass_sum + 1e-30))
 
     min_t_orb = np.nanmin(t_orb)
     if np.isfinite(min_t_orb):
@@ -186,6 +186,7 @@ class SolarSystem:
         remaining = dt
         substeps = 0
         eps_dt = min(1e-9, 1e-4 * max_step)
+        a0 = None
         while remaining > eps_dt:
             substeps += 1
             if substeps > self._timestep_config.max_substeps:
@@ -194,7 +195,9 @@ class SolarSystem:
                     f"Selected substep dt={max_step:.6e} days."
                 )
             step_dt = min(remaining, max_step)
-            positions, velocities = self._integrator.step(positions, velocities, masses, step_dt)
+            positions, velocities, a0 = self._integrator.step(
+                positions, velocities, masses, step_dt, a0=a0, return_acc=True
+            )
             remaining -= step_dt
 
         self._last_substeps = substeps
@@ -215,6 +218,21 @@ class SolarSystem:
         radius grows by equal-density volume. Loops until no overlapping pair remains so
         chains collapse in a single call. Returns one CollisionEvent per merge performed.
         """
+        # Vectorized candidate pre-check: if no active bodies overlap, return immediately
+        active = [b for b in self._bodies if b.active]
+        n = len(active)
+        if n < 2:
+            return []
+
+        pos_arr = np.array([b.pos for b in active], dtype=float)
+        rad_arr = np.array([b.radius for b in active], dtype=float) / KM_PER_AU
+        i_idx, j_idx = np.triu_indices(n, k=1)
+        diff_c = pos_arr[i_idx] - pos_arr[j_idx]
+        dist_sq = np.sum(diff_c * diff_c, axis=-1)
+        thresh_sq = (rad_arr[i_idx] + rad_arr[j_idx]) ** 2
+        if not np.any(dist_sq < thresh_sq):
+            return []
+
         events: list[CollisionEvent] = []
         while True:
             active = [b for b in self._bodies if b.active]

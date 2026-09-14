@@ -14,6 +14,21 @@ import requests
 HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 _LOG_FILE = Path.home() / ".nbodiesgravity" / "horizons_error.log"
 
+_SESSION: requests.Session | None = None
+
+_RE_SOE_EOE = re.compile(r"\$\$SOE(.*?)\$\$EOE", re.DOTALL)
+_RE_KEYS = {
+    k: re.compile(rf"{re.escape(k)}\s*=\s*([-+]?\d+\.\d+[Ee][+-]?\d+)")
+    for k in ("X", "Y", "Z", "VX", "VY", "VZ")
+}
+
+
+def _get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+    return _SESSION
+
 
 class HorizonsError(Exception):
     """Raised on network failure or unparseable Horizons response."""
@@ -60,7 +75,8 @@ def fetch(body_id: str, epoch_date: date) -> dict:
         "CSV_FORMAT": "NO",
     }
     try:
-        resp = requests.get(HORIZONS_URL, params=params, timeout=30)
+        session = _get_session()
+        resp = session.get(HORIZONS_URL, params=params, timeout=30)
         resp.raise_for_status()
     except (requests.RequestException, OSError) as exc:
         raise HorizonsError(f"Network error fetching body {body_id}: {exc}") from exc
@@ -74,7 +90,7 @@ def fetch(body_id: str, epoch_date: date) -> dict:
 
 
 def _parse_vectors(body_id: str, result_text: str) -> dict:
-    match = re.search(r"\$\$SOE(.*?)\$\$EOE", result_text, re.DOTALL)
+    match = _RE_SOE_EOE.search(result_text)
     if not match:
         raise HorizonsError(
             f"Could not find $$SOE/$$EOE block in Horizons response for body {body_id}"
@@ -87,7 +103,8 @@ def _parse_vectors(body_id: str, result_text: str) -> dict:
 
 
 def _val(body_id: str, text: str, key: str) -> float:
-    m = re.search(rf"{re.escape(key)}\s*=\s*([-+]?\d+\.\d+[Ee][+-]?\d+)", text)
+    regex = _RE_KEYS.get(key)
+    m = regex.search(text) if regex else re.search(rf"{re.escape(key)}\s*=\s*([-+]?\d+\.\d+[Ee][+-]?\d+)", text)
     if not m:
         raise HorizonsError(
             f"Could not parse '{key}' from Horizons response for body {body_id}"

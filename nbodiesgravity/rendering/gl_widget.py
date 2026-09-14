@@ -161,6 +161,21 @@ class GLWidget(QOpenGLWidget):
         glClearColor(0.0, 0.0, 0.0, 1.0)
         self._sphere_prog = _link_program(SPHERE_VERT_SRC, SPHERE_FRAG_SRC)
         self._line_prog = _link_program(LINE_VERT_SRC, LINE_FRAG_SRC)
+
+        # Cache line shader uniform locations (WS 5)
+        self._u_line_vp = glGetUniformLocation(self._line_prog, "uViewProjection")
+        self._u_line_center = glGetUniformLocation(self._line_prog, "uCenterOffset")
+        self._u_line_alpha = glGetUniformLocation(self._line_prog, "uAlpha")
+        self._u_line_color = glGetUniformLocation(self._line_prog, "uColor")
+
+        # Cache sphere shader uniform locations (WS 5)
+        self._u_sphere_view = glGetUniformLocation(self._sphere_prog, "uView")
+        self._u_sphere_proj = glGetUniformLocation(self._sphere_prog, "uProjection")
+        self._u_sphere_light_pos = glGetUniformLocation(self._sphere_prog, "uLightPos")
+        self._u_sphere_model = glGetUniformLocation(self._sphere_prog, "uModel")
+        self._u_sphere_color = glGetUniformLocation(self._sphere_prog, "uColor")
+        self._u_sphere_emissive = glGetUniformLocation(self._sphere_prog, "uEmissive")
+
         self._sphere_mesh.initialize()
         for tb in self._trail_buffers.values():
             tb.initialize()
@@ -203,36 +218,29 @@ class GLWidget(QOpenGLWidget):
 
         # --- Trails ---
         glUseProgram(self._line_prog)
-        glUniformMatrix4fv(
-            glGetUniformLocation(self._line_prog, "uViewProjection"),
-            1, GL_FALSE, vp.T,
-        )
+        glUniformMatrix4fv(self._u_line_vp, 1, GL_FALSE, vp.T)
         # uCenterOffset zeroed: relative offset is baked into TrailBuffer at append time
-        glUniform3f(glGetUniformLocation(self._line_prog, "uCenterOffset"), 0.0, 0.0, 0.0)
-        glUniform1f(glGetUniformLocation(self._line_prog, "uAlpha"), 0.55)
+        glUniform3f(self._u_line_center, 0.0, 0.0, 0.0)
+        glUniform1f(self._u_line_alpha, 0.55)
         for state in snap:
             if not state.active:
                 continue
-            body = (self._simulation_thread.system.get_body(state.name)
-                    if self._simulation_thread else None)
-            if body and not body.show_trail:
+            if not getattr(state, "show_trail", True):
                 continue
             tb = self._trail_buffers[state.name]
-            glUniform3f(glGetUniformLocation(self._line_prog, "uColor"), *tb.color)
+            glUniform3f(self._u_line_color, *tb.color)
             tb.draw()
 
         # --- Spheres ---
         glUseProgram(self._sphere_prog)
-        glUniformMatrix4fv(
-            glGetUniformLocation(self._sphere_prog, "uView"), 1, GL_FALSE, view.T)
-        glUniformMatrix4fv(
-            glGetUniformLocation(self._sphere_prog, "uProjection"), 1, GL_FALSE, self._proj.T)
+        glUniformMatrix4fv(self._u_sphere_view, 1, GL_FALSE, view.T)
+        glUniformMatrix4fv(self._u_sphere_proj, 1, GL_FALSE, self._proj.T)
         star_state = next(
             (s for s in snap if (info := self._display_info.get(s.name)) and info.is_star),
             next((s for s in snap if s.name == "Sun"), snap[0]),
         )
         glUniform3f(
-            glGetUniformLocation(self._sphere_prog, "uLightPos"),
+            self._u_sphere_light_pos,
             *(star_state.pos - offset).astype(np.float32),
         )
         for state in snap:
@@ -243,18 +251,15 @@ class GLWidget(QOpenGLWidget):
             # bodies stay visible when zoomed out to the full solar-system view.
             phys_r = info.display_radius if info else 0.002
             r = max(phys_r, self.camera.distance * 0.002)
-            body = (self._simulation_thread.system.get_body(state.name)
-                    if self._simulation_thread else None)
-            if body and body.label == "moon" and state.name != "Charon":
+            if getattr(state, "label", "planet") == "moon" and state.name != "Charon":
                 r /= 10.0
             pos_rel = (state.pos - offset).astype(np.float32)
             model = _model_matrix(pos_rel, r)
-            glUniformMatrix4fv(
-                glGetUniformLocation(self._sphere_prog, "uModel"), 1, GL_FALSE, model.T)
+            glUniformMatrix4fv(self._u_sphere_model, 1, GL_FALSE, model.T)
             color = info.color if info else (1.0, 1.0, 1.0)
-            glUniform3f(glGetUniformLocation(self._sphere_prog, "uColor"), *color)
+            glUniform3f(self._u_sphere_color, *color)
             glUniform1i(
-                glGetUniformLocation(self._sphere_prog, "uEmissive"),
+                self._u_sphere_emissive,
                 int(info.is_star if info else False),
             )
             self._sphere_mesh.draw()
