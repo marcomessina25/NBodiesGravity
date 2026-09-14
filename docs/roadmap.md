@@ -216,7 +216,7 @@ The application should move beyond simply showing bodies moving on screen and al
 - trajectory statistics;
 - numerical diagnostics over time;
 - plots of conserved quantities;
-- export of simulation/diagnostic data.
+- export of diagnostic conservation history and orbital elements data (continuous historical ephemeris/trajectory export deferred to v0.9).
 
 ### Important design rule
 
@@ -294,6 +294,7 @@ Potential additions:
 - simulation checkpoints;
 - deterministic replay;
 - rewind from checkpoints;
+- historical trajectory/ephemeris time-series export;
 - improved reset semantics.
 
 ### Physical models

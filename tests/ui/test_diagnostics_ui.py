@@ -60,9 +60,15 @@ def test_diagnostics_plots_update(qapp, test_sim):
         dialog._update_plots()
         # Canvas should have drawn without error
         assert dialog._canvas is not None
+        assert hasattr(dialog, "_ax_adaptive")
+        assert hasattr(dialog, "_ax_adaptive_dt")
+        assert len(dialog._ax_adaptive.lines) == 1
+        assert len(dialog._ax_adaptive_dt.lines) == 1
 
         dialog._clear_plot_history()
         assert len(test_sim.diagnostics_history) == 0
+        assert len(dialog._ax_adaptive.lines) == 0
+        assert len(dialog._ax_adaptive_dt.lines) == 0
     finally:
         dialog.close()
 

@@ -15,6 +15,7 @@ latest_snapshot                 — read from render thread (GIL-safe)
 from __future__ import annotations
 import time
 import threading
+import logging
 
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -23,6 +24,8 @@ from nbodiesgravity.engine.body import BodyState
 from nbodiesgravity.engine.exceptions import NumericalIntegrityError
 from nbodiesgravity.engine.system import SolarSystem
 from nbodiesgravity.engine.diagnostics import ConservationTracker, DiagnosticsHistoryBuffer, DiagnosticReport
+
+logger = logging.getLogger(__name__)
 
 _TARGET_HZ: int = 500       # real-time physics rate cap (~500 iterations/s)
 _MAX_SIM_DT: float = 1.0    # max simulated days per sub-step (accuracy cap)
@@ -149,8 +152,13 @@ class SimulationThread(QThread):
                     )
                     self._latest_report = report
                     self.diagnostics_ready.emit(report)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "Diagnostics evaluation failed at day %.3f: %s",
+                        self._elapsed_days,
+                        exc,
+                        exc_info=True,
+                    )
 
             if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() or float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
                 self._paused = True

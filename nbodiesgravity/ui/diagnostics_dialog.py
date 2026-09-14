@@ -277,13 +277,18 @@ class ScientificDiagnosticsDialog(QDialog):
         layout.setContentsMargins(4, 4, 4, 4)
 
         # Matplotlib Figure with dark theme
-        self._fig = Figure(figsize=(6, 4), dpi=100)
+        self._fig = Figure(figsize=(6, 5.5), dpi=100)
         self._fig.patch.set_facecolor("#1e1e1e")
 
-        self._ax_energy = self._fig.add_subplot(211)
-        self._ax_momentum = self._fig.add_subplot(212)
+        self._ax_energy = self._fig.add_subplot(311)
+        self._ax_momentum = self._fig.add_subplot(312)
+        self._ax_adaptive = self._fig.add_subplot(313)
+        self._ax_adaptive_dt = self._ax_adaptive.twinx()
+
         self._style_axes(self._ax_energy, "Relative Energy Drift (ΔE/E₀)")
         self._style_axes(self._ax_momentum, "Momentum Drifts")
+        self._style_axes(self._ax_adaptive, "Substeps per Step")
+        self._style_twin_axis(self._ax_adaptive_dt, "Adaptive dt (days)")
 
         self._fig.tight_layout()
         self._canvas = FigureCanvas(self._fig)
@@ -301,8 +306,16 @@ class ScientificDiagnosticsDialog(QDialog):
         ax.tick_params(colors="#cccccc", labelsize=8)
         ax.xaxis.label.set_color("#cccccc")
         ax.yaxis.label.set_color("#cccccc")
-        ax.set_ylabel(ylabel, color="#ffffff", fontsize=9)
+        ax.set_ylabel(ylabel, color="#ffffff", fontsize=8)
         ax.grid(True, linestyle="--", alpha=0.3, color="#666666")
+        for spine in ax.spines.values():
+            spine.set_color("#555555")
+
+    def _style_twin_axis(self, ax, ylabel: str) -> None:
+        ax.tick_params(colors="#e056fd", labelsize=8)
+        ax.yaxis.label.set_color("#e056fd")
+        ax.set_ylabel(ylabel, color="#e056fd", fontsize=8)
+        ax.grid(False)
         for spine in ax.spines.values():
             spine.set_color("#555555")
 
@@ -470,9 +483,14 @@ class ScientificDiagnosticsDialog(QDialog):
 
         self._ax_energy.clear()
         self._ax_momentum.clear()
+        self._ax_adaptive.clear()
+        self._ax_adaptive_dt.clear()
+
         self._style_axes(self._ax_energy, "Rel. Energy Drift (ΔE/E₀)")
         self._style_axes(self._ax_momentum, "Momentum Drift")
-        self._ax_momentum.set_xlabel("Elapsed Time (days)", color="#cccccc", fontsize=9)
+        self._style_axes(self._ax_adaptive, "Substeps")
+        self._style_twin_axis(self._ax_adaptive_dt, "Adaptive dt (days)")
+        self._ax_adaptive.set_xlabel("Elapsed Time (days)", color="#cccccc", fontsize=9)
 
         # Plot energy drift
         self._ax_energy.plot(times, data["energy_rel_drift"], color="#00d4ff", linewidth=1.5, label="ΔE/E₀")
@@ -483,6 +501,13 @@ class ScientificDiagnosticsDialog(QDialog):
         self._ax_momentum.plot(times, data["angular_momentum_rel_drift"], color="#00ff88", linewidth=1.5, label="Angular ΔL/L₀")
         self._ax_momentum.legend(loc="upper right", facecolor="#1e1e1e", edgecolor="#555555", labelcolor="#ffffff", fontsize=8)
 
+        # Plot adaptive integration: substeps per step and selected dt
+        line1 = self._ax_adaptive.plot(times, data["substeps"], color="#f1c40f", linewidth=1.5, label="Substeps")
+        line2 = self._ax_adaptive_dt.plot(times, data["adaptive_dt"], color="#e056fd", linewidth=1.5, linestyle="--", label="Adaptive dt")
+        lines = line1 + line2
+        labels = [line.get_label() for line in lines]
+        self._ax_adaptive.legend(lines, labels, loc="upper right", facecolor="#1e1e1e", edgecolor="#555555", labelcolor="#ffffff", fontsize=8)
+
         self._fig.tight_layout()
         self._canvas.draw_idle()
 
@@ -490,8 +515,12 @@ class ScientificDiagnosticsDialog(QDialog):
         self._sim.diagnostics_history.clear()
         self._ax_energy.clear()
         self._ax_momentum.clear()
+        self._ax_adaptive.clear()
+        self._ax_adaptive_dt.clear()
         self._style_axes(self._ax_energy, "Rel. Energy Drift (ΔE/E₀)")
         self._style_axes(self._ax_momentum, "Momentum Drift")
+        self._style_axes(self._ax_adaptive, "Substeps")
+        self._style_twin_axis(self._ax_adaptive_dt, "Adaptive dt (days)")
         self._fig.tight_layout()
         self._canvas.draw_idle()
 

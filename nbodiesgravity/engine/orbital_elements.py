@@ -109,7 +109,7 @@ def compute_orbital_elements(
     r_p = p / (1.0 + e) if (1.0 + e) > 1e-15 else 0.0
 
     # Apoapsis distance: r_a = a * (1 + e) for ellipse, inf for unbound
-    is_bound = (e < 1.0) and (energy < 0.0)
+    is_bound = (e < (1.0 - 1e-12)) and (energy < -1e-15)
     if is_bound:
         r_a = a * (1.0 + e)
         # Period: T = 2*pi * sqrt(a³ / mu)

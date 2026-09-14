@@ -101,3 +101,37 @@ def test_simulation_thread_diagnostics_integration(qapp):
     data = sim.diagnostics_history.get_data()
     assert len(data["times"]) == len(sim.diagnostics_history)
 
+
+def test_simulation_thread_diagnostics_failure_logged(qapp, caplog):
+    import time as _time
+    import logging
+    b1 = CelestialBody("Sun", 1.989e30, np.zeros(3), np.zeros(3), 1.0, (1, 1, 0))
+    system = SolarSystem([b1])
+    sim = SimulationThread(system)
+
+    def bad_evaluate(snap):
+        raise RuntimeError("Simulated diagnostics failure")
+
+    sim._tracker.evaluate = bad_evaluate
+
+    with caplog.at_level(logging.WARNING):
+        sim.set_timescale(10.0)
+        sim.resume()
+        sim.start()
+
+        for _ in range(30):
+            if "Simulated diagnostics failure" in caplog.text:
+                break
+            _time.sleep(0.01)
+            qapp.processEvents()
+
+        # Thread must still be running (not killed by diagnostics exception)
+        assert sim.isRunning()
+
+        sim.pause()
+        sim.stop_thread()
+
+    assert "Diagnostics evaluation failed" in caplog.text
+    assert "Simulated diagnostics failure" in caplog.text
+
+

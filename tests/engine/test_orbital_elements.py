@@ -137,3 +137,96 @@ def test_find_dominant_primary_solar_system_hierarchy():
     assert find_dominant_primary(sun, [earth, mars]) == earth  # largest gravitational pull on Sun among candidates
     # Single body case
     assert find_dominant_primary(earth, [earth]) is None
+
+
+def test_inclined_orbit_30_degrees():
+    mu = 2.959122082855911e-4
+    r0 = 1.2
+    v_circ = np.sqrt(mu / r0)
+    inc_rad = np.radians(30.0)
+
+    r_vec = np.array([r0, 0.0, 0.0])
+    v_vec = np.array([0.0, v_circ * np.cos(inc_rad), v_circ * np.sin(inc_rad)])
+
+    elem = compute_orbital_elements(r_vec, v_vec, mu)
+
+    assert elem.is_bound is True
+    assert pytest.approx(elem.semi_major_axis, rel=1e-7) == 1.2
+    assert pytest.approx(elem.eccentricity, abs=1e-7) == 0.0
+    assert pytest.approx(elem.inclination_deg, rel=1e-7) == 30.0
+    assert pytest.approx(elem.inclination, rel=1e-7) == inc_rad
+
+
+def test_full_keplerian_elements_analytical_recovery():
+    """Verify analytical recovery of all 6 orbital elements: a, e, i, Omega, omega, nu."""
+    mu = 2.959122082855911e-4
+
+    target_a = 1.5
+    target_e = 0.25
+    target_i_deg = 30.0
+    target_omega_node_deg = 45.0
+    target_arg_peri_deg = 60.0
+    target_nu_deg = 35.0
+
+    i = np.radians(target_i_deg)
+    Omega = np.radians(target_omega_node_deg)
+    omega = np.radians(target_arg_peri_deg)
+    nu = np.radians(target_nu_deg)
+
+    # 1. Perifocal coordinates
+    p = target_a * (1.0 - target_e ** 2)
+    r_mag = p / (1.0 + target_e * np.cos(nu))
+
+    r_perifocal = np.array([r_mag * np.cos(nu), r_mag * np.sin(nu), 0.0])
+    v_perifocal = np.sqrt(mu / p) * np.array([-np.sin(nu), target_e + np.cos(nu), 0.0])
+
+    # 2. Rotation matrix from perifocal to inertial (equatorial)
+    P_vec = np.array([
+        np.cos(Omega) * np.cos(omega) - np.sin(Omega) * np.sin(omega) * np.cos(i),
+        np.sin(Omega) * np.cos(omega) + np.cos(Omega) * np.sin(omega) * np.cos(i),
+        np.sin(omega) * np.sin(i),
+    ])
+    Q_vec = np.array([
+        -np.cos(Omega) * np.sin(omega) - np.sin(Omega) * np.cos(omega) * np.cos(i),
+        -np.sin(Omega) * np.sin(omega) + np.cos(Omega) * np.cos(omega) * np.cos(i),
+        np.cos(omega) * np.sin(i),
+    ])
+
+    r_inertial = r_perifocal[0] * P_vec + r_perifocal[1] * Q_vec
+    v_inertial = v_perifocal[0] * P_vec + v_perifocal[1] * Q_vec
+
+    elem = compute_orbital_elements(r_inertial, v_inertial, mu)
+
+    assert elem.is_bound is True
+    assert pytest.approx(elem.semi_major_axis, rel=1e-7) == target_a
+    assert pytest.approx(elem.eccentricity, rel=1e-7) == target_e
+    assert pytest.approx(elem.inclination_deg, rel=1e-7) == target_i_deg
+    assert pytest.approx(elem.longitude_ascending_node_deg, rel=1e-7) == target_omega_node_deg
+    assert pytest.approx(elem.argument_of_periapsis_deg, rel=1e-7) == target_arg_peri_deg
+    assert pytest.approx(elem.true_anomaly_deg, rel=1e-7) == target_nu_deg
+    assert pytest.approx(elem.periapsis, rel=1e-7) == target_a * (1.0 - target_e)
+    assert pytest.approx(elem.apoapsis, rel=1e-7) == target_a * (1.0 + target_e)
+    expected_period = 2.0 * np.pi * np.sqrt(target_a ** 3 / mu)
+    assert pytest.approx(elem.period, rel=1e-7) == expected_period
+
+
+def test_parabolic_boundary_orbit():
+    """Verify behavior at the parabolic escape boundary (e = 1.0, epsilon = 0.0)."""
+    mu = 2.959122082855911e-4
+    r_p = 1.0  # Periapsis distance
+    # Exact escape speed at periapsis: v_esc = sqrt(2 * mu / r_p)
+    v_esc = np.sqrt(2.0 * mu / r_p)
+
+    r_vec = np.array([r_p, 0.0, 0.0])
+    v_vec = np.array([0.0, v_esc, 0.0])
+
+    elem = compute_orbital_elements(r_vec, v_vec, mu)
+
+    assert elem.is_bound is False
+    assert pytest.approx(elem.eccentricity, rel=1e-7) == 1.0
+    assert pytest.approx(elem.periapsis, rel=1e-7) == r_p
+    assert np.isinf(elem.apoapsis)
+    assert np.isinf(elem.period)
+    assert np.isinf(elem.semi_major_axis)
+    assert pytest.approx(elem.specific_energy, abs=1e-15) == 0.0
+

@@ -182,17 +182,21 @@ docs/
     specs/
         v05.md                   # v0.5.0 implementation specification
         v06.md                   # v0.6.0 numerical robustness specification
+        v07.md                   # v0.7.0 scientific diagnostics and orbital analysis specification
+        v07_items_left.md        # v0.7.0 pre-PR checklist and verification tracking
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
-        diagnostics.py           # Reusable scientific conservation metrics (energy, momentum, CM)
+        diagnostics.py           # Reusable scientific conservation metrics and DiagnosticsHistoryBuffer
         exceptions.py            # NumericalIntegrityError and budget exceptions
         integrator.py            # Vectorized pairwise Velocity Verlet integrator with softening
+        orbital_elements.py      # Pure-NumPy Keplerian orbital elements solver and primary detection
         system.py                # SolarSystem — step, snapshot, TimeStepConfig, collision resolution
         simulation_thread.py     # QThread physics loop (500 Hz loop, real-time synchronized)
     data/
         cache.py                 # Local JSON cache for Horizons results
+        export.py                # Scientific data export (CSV and JSON for conservation and orbital elements)
         horizons.py              # JPL Horizons REST client
         loader.py                # load_default_system / load_system_at_date
         snapshots/j2000.json     # Bundled J2000 snapshot (39 standard bodies)
@@ -207,17 +211,19 @@ nbodiesgravity/
         body_list_panel.py       # Sidebar with Category Controls and body list
         control_panel.py         # Bottom control bar: date, speed, center, top view, play/pause
         date_loader_worker.py    # QThread for background JPL Horizons fetch
+        diagnostics_dialog.py    # Non-modal scientific diagnostics, live Matplotlib plots, and export dialog
         main_window.py           # Top-level window assembly and signal wiring
     main.py                      # Entry point
 scripts/
     benchmark_engine.py          # Headless benchmarking and conservation reporting tool
+    compare_convergence.py       # Adaptive vs. fixed timestep convergence characterization
     fetch_j2000.py               # One-time script to regenerate j2000.json
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
 tests/
-    data/                        # Horizons client and cache tests
-    engine/                      # Integrator, system, collisions, timestep, and failure tests
+    data/                        # Horizons client, cache, and CSV/JSON export tests
+    engine/                      # Integrator, system, orbital elements, diagnostics history, collisions, and timestep tests
     rendering/                   # OpenGL, camera, shaders, and trail buffer tests
-    ui/                          # PyQt widget, transaction, and persistence tests
+    ui/                          # PyQt widget, diagnostics panel, transaction, and persistence tests
     validation/                  # Physical conservation, benchmarks A-F, convergence, and softening tests
 environment.yml
 ```

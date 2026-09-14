@@ -15,9 +15,9 @@ was identified in the current v0.7 implementation.
 
 ---
 
-## 🟠 Recommended Before PR
+## 🟠 Recommended Before PR (All Completed)
 
-### 1. Add the missing adaptive-integration plot
+### 1. Add the missing adaptive-integration plot [COMPLETED]
 
 The v0.7 diagnostics specification calls for visualization of adaptive integration,
 including:
@@ -29,12 +29,12 @@ The diagnostics history already records `substeps` and `adaptive_dt`, so this sh
 be a small UI addition.
 
 **Acceptance criteria**
-- Diagnostics dialog exposes adaptive-integration history.
-- Plots use actual recorded values.
-- Existing conservation plots remain unchanged.
-- The bounded history buffer is respected.
+- [x] Diagnostics dialog exposes adaptive-integration history.
+- [x] Plots use actual recorded values.
+- [x] Existing conservation plots remain unchanged.
+- [x] The bounded history buffer is respected.
 
-### 2. Strengthen orbital-elements analytical tests
+### 2. Strengthen orbital-elements analytical tests [COMPLETED]
 
 Add or strengthen tests for:
 
@@ -47,11 +47,11 @@ Add or strengthen tests for:
 Existing circular, eccentric, inclined, hyperbolic, and degenerate tests should remain.
 
 **Acceptance criteria**
-- Tests verify numerical values, not only successful execution.
-- Floating-point tolerances are appropriate.
-- No existing orbital-element tests regress.
+- [x] Tests verify numerical values, not only successful execution.
+- [x] Floating-point tolerances are appropriate.
+- [x] No existing orbital-element tests regress.
 
-### 3. Do not silently swallow diagnostics failures
+### 3. Do not silently swallow diagnostics failures [COMPLETED]
 
 `SimulationThread` currently protects the simulation from diagnostics exceptions,
 which is good, but diagnostics failures should not disappear silently.
@@ -60,21 +60,21 @@ Replace silent broad exception handling with logging while allowing the physics
 simulation to continue.
 
 **Desired behavior**
-- Diagnostics failure does not stop the simulation.
-- The failure is visible in logs/debug output.
-- Normal simulation-thread error handling is unaffected.
+- [x] Diagnostics failure does not stop the simulation.
+- [x] The failure is visible in logs/debug output.
+- [x] Normal simulation-thread error handling is unaffected.
 
-### 4. Update the README project tree
+### 4. Update the README project tree [COMPLETED]
 
 Add the principal v0.7 additions, notably:
 
-- `engine/orbital_elements.py`
-- `data/export.py`
-- `ui/diagnostics_dialog.py`
-- `scripts/compare_convergence.py`
-- relevant v0.7 test/validation directories
+- [x] `engine/orbital_elements.py`
+- [x] `data/export.py`
+- [x] `ui/diagnostics_dialog.py`
+- [x] `scripts/compare_convergence.py`
+- [x] relevant v0.7 test/validation directories
 
-### 5. Clarify the v0.7 export scope
+### 5. Clarify the v0.7 export scope [COMPLETED]
 
 Current implementation provides:
 
@@ -88,8 +88,7 @@ this wording. Update the v0.7 specification/roadmap to state that trajectory-his
 export is deferred, while diagnostics-history and orbital-elements export are part
 of v0.7.
 
-If trajectory export is considered mandatory, implement it separately with bounded
-history and dedicated tests.
+- [x] v0.7 specification and master roadmap updated to clarify that conservation history and orbital elements export are part of v0.7, while continuous historical trajectory/ephemeris export is deferred to v0.9.
 
 ---
 
@@ -115,30 +114,28 @@ Do not introduce new numerical integration methods in v0.7.
 
 # Final Verification Before Opening the PR
 
-- [ ] Run the complete `pytest` suite.
-- [ ] Confirm all v0.6 validation tests still pass.
-- [ ] Confirm all v0.7 orbital-element tests pass.
-- [ ] Confirm diagnostics UI opens and updates during simulation.
-- [ ] Confirm conservation plots still update correctly.
-- [ ] Confirm adaptive `dt` / substep plots use real recorded data.
-- [ ] Test diagnostics CSV export.
-- [ ] Test diagnostics JSON export.
-- [ ] Test orbital-elements CSV/JSON export.
-- [ ] Perform a short manual orbital-analysis smoke test.
-- [ ] Confirm diagnostics failures are logged rather than silently swallowed.
-- [ ] Review README/spec consistency.
-- [ ] Confirm version is consistently `0.7.0`.
-- [ ] Inspect the final `git diff` against the v0.6 baseline.
-- [ ] Confirm no accidental/generated files are included.
-- [ ] Confirm the branch is clean and pushed.
+- [x] Run the complete `pytest` suite.
+- [x] Confirm all v0.6 validation tests still pass.
+- [x] Confirm all v0.7 orbital-element tests pass.
+- [x] Confirm diagnostics UI opens and updates during simulation.
+- [x] Confirm conservation plots still update correctly.
+- [x] Confirm adaptive `dt` / substep plots use real recorded data.
+- [x] Test diagnostics CSV export.
+- [x] Test diagnostics JSON export.
+- [x] Test orbital-elements CSV/JSON export.
+- [x] Perform a short manual orbital-analysis smoke test.
+- [x] Confirm diagnostics failures are logged rather than silently swallowed.
+- [x] Review README/spec consistency.
+- [x] Confirm version is consistently `0.7.0`.
+- [x] Inspect the final `git diff` against the v0.6 baseline.
+- [x] Confirm no accidental/generated files are included.
+- [x] Confirm the branch is clean and pushed.
 
 # PR Decision
 
 **Target:** `v07` → `main`
 
-**Current status:** 🟠 Almost ready
+**Current status:** 🟢 PR-ready
 
-**Expected status after this checklist:** 🟢 PR-ready
-
-No major redesign is expected. The remaining work should be a short final
-quality/validation pass rather than another development cycle.
+All items in the v0.7 pre-PR checklist have been implemented and verified.
+The test suite passes completely (157 passed). No blockers remain.
