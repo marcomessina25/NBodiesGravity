@@ -100,7 +100,7 @@ The detailed implementation documents and architectural contracts currently defi
 - [`specs/v06.md`](specs/v06.md) — v0.6.0 numerical robustness & validation
 - [`specs/v07.md`](specs/v07.md) — v0.7.0 scientific diagnostics & orbital analysis
 - [`specs/v08.md`](specs/v08.md) — v0.8.0 performance, scalability & runtime efficiency
-- [`specs/v09.md`](specs/v09.md) — v0.9.0 advanced simulation capabilities & pre-v1.0 hardening
+- [`specs/v09.md`](specs/v09.md) — v0.9.0 full implementation plan & architectural contract (advanced simulation capabilities)
 
 ---
 
@@ -281,7 +281,7 @@ The guiding rule is:
 
 ### Detailed plan
 
-See [`specs/v09.md`](specs/v09.md).
+The full, detailed implementation plan and architectural contract is established in [`specs/v09.md`](specs/v09.md).
 
 ### Main workstreams
 
