@@ -47,6 +47,9 @@ class DiagnosticReport:
     linear_momentum_drift: MetricDrift
     angular_momentum_drift: MetricDrift
     center_of_mass_drift: MetricDrift
+    integrator_name: str = "velocity_verlet"
+    gravity_model: str = "newtonian"
+    collision_model: str = "merge"
 
     @property
     def normalized_momentum_drift(self) -> float:
@@ -223,6 +226,10 @@ class ConservationTracker:
             Sequence[BodyState],
             tuple[np.ndarray, np.ndarray, np.ndarray],
         ],
+        *,
+        integrator_name: str = "velocity_verlet",
+        gravity_model: str = "newtonian",
+        collision_model: str = "merge",
     ) -> DiagnosticReport:
         """Evaluate current state and return a DiagnosticReport with drift metrics."""
         current_snap = compute_snapshot(current_source, softening=self.softening)
@@ -238,6 +245,9 @@ class ConservationTracker:
             linear_momentum_drift=p_drift,
             angular_momentum_drift=l_drift,
             center_of_mass_drift=cm_drift,
+            integrator_name=integrator_name,
+            gravity_model=gravity_model,
+            collision_model=collision_model,
         )
 
 

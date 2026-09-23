@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.8.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-0.9.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -10,12 +10,16 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 
 ### Simulation Engine & High-Performance Numerics
 
-- N-body gravitational physics using the **Velocity Verlet** integrator with a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
+- **Pluggable Symplectic Integrator Architecture**: Decoupled numerical stepping via an explicit `Integrator` protocol and `IntegratorConfig`. Includes the **Velocity Verlet** integrator as the validated default baseline (with acceleration reuse) and second-order **Leapfrog** (kick-drift-kick) as an alternative symplectic integrator.
+- **Analytical Initial-Condition Presets**: Six scientifically defined deterministic presets (`circular_two_body`, `eccentric_two_body`, `oriented_two_body`, `earth_moon`, `binary_star`, `restricted_three_body` with L4/L5 Lagrange points) plus custom initial-condition registration.
+- **Deterministic Simulation Checkpoints & Replay**: Schema version 2 checkpoints capturing exact coordinates, velocities, masses, integrator configuration, and elapsed simulation time for bitwise-reproducible resumes and headless experiment replays.
+- **Controlled Stepping & Step-by-Step Analysis**: Single-step execution (`step_once`), duration-bounded integration (`advance`), and optional maximum simulation time limits.
+- N-body gravitational physics using a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
 - **Optimized $O(N^2)$ Pairwise Vectorization**: In-place distance scaling and einsum contractions eliminate intermediate NumPy allocations, achieving **2.2x to 9.6x speedups** while reproducing reference results within $< 10^{-15}$ relative error on the validated workloads.
-- **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet substeps, halving expensive pairwise force evaluations in multi-substep integration.
+- **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet/Leapfrog substeps, halving expensive pairwise force evaluations in multi-substep integration.
 - **Upper-Triangle Adaptive Timestepping**: Vectorized timescale calculations using upper-triangle indices without full-matrix temporaries or diagonal masking overhead.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
-- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
+- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying active integrator metadata, physics/collision models, conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
 - **Drift Tolerance Status Badges**: Visual indicators (`PASS` in green, `WARN` in amber, `ALERT` in red) for energy, linear momentum, angular momentum, and center of mass conservation drift against documented scientific thresholds.
 - **Time-Window Selection & Plot Decimation**: Selectable historical view windows (All Retained History, Last 100 Days, Last 365 Days) with automatic plot decimation to guarantee responsive UI interactions regardless of buffer depth.
 - **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
@@ -59,6 +63,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 | Epoch date picker | Select a start date; fetches state vectors from JPL Horizons with a dynamic progress bar |
 | Live simulation date | Shows the current simulated date (YYYY-MM-DD), updated at 4 Hz |
 | Play / Pause | Start or pause the physics loop |
+| Step | Advances physics by a single discrete timestep; active when paused |
 | Restart | Instantly restarts the simulation from the initial loaded epoch (returns to the initial state of the loaded system, not to the state immediately preceding a collision) |
 | Speed slider | 200-step log scale; 1 s = 1 h (left) to 1 s = 1 y (right); scroll-wheel friendly |
 | Center body selector | Sets the camera and trail reference frame; changing it resets camera panning and clears trails |
@@ -99,9 +104,9 @@ Inline validation is active at all times: the name must be non-empty and unique 
 
 | Menu | Actions |
 |---|---|
-| **File** | New System (reload J2000), Load System… (JSON), Save System… (JSON), Exit |
-| **Simulation** | Add Body…, Edit Selected…, Remove Selected |
-| **View** | Reset Camera, Top View, Toggle All Trails, Show/Hide Body Names |
+| **File** | New System (reload J2000), Load System… (JSON), Save System… (JSON), Load Preset…, Save Checkpoint…, Load Checkpoint…, Exit |
+| **Simulation** | Integrator (Velocity Verlet [Validated], Leapfrog), Step Once, Add Body…, Edit Selected…, Remove Selected |
+| **View** | Reset Camera, Top View, Toggle All Trails, Show/Hide Body Names, Scientific Diagnostics… (Ctrl+D) |
 
 ---
 
@@ -113,8 +118,8 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
   - **v0.5.0**: State consistency, transactional epoch loading, full persistence round-trip, star classification.
   - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
   - **v0.7.0**: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
-  - **v0.8.0** *(current)*: Performance profiling, memory optimization, and scalability characterization.
-  - **v0.9.0**: Advanced integrators, custom presets, and simulation checkpoints.
+  - **v0.8.0**: Performance profiling, memory optimization, and scalability characterization.
+  - **v0.9.0** *(current)*: Advanced simulation capabilities, pluggable symplectic integrators (Velocity Verlet & Leapfrog), analytical initial-condition presets, deterministic checkpoints & replay, and controlled stepping.
   - **v1.0.0**: Stable, validated scientific baseline.
 - **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
 - **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
@@ -230,10 +235,14 @@ nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
+        checkpoints.py           # Simulation checkpoints with schema versioning and bitwise restoration
         diagnostics.py           # Reusable scientific conservation metrics and DiagnosticsHistoryBuffer
         exceptions.py            # NumericalIntegrityError and budget exceptions
-        integrator.py            # Vectorized pairwise Velocity Verlet integrator with softening
+        experiments.py           # Experiment configuration, metadata tracking, and deterministic replay
+        integrator.py            # Pluggable integrators: Velocity Verlet baseline and Leapfrog (KDK)
         orbital_elements.py      # Pure-NumPy Keplerian orbital elements solver and primary detection
+        physics.py               # Explicit PhysicsConfig and CollisionConfig definitions
+        presets.py               # Analytical initial-condition presets and registry
         system.py                # SolarSystem — step, snapshot, TimeStepConfig, collision resolution
         simulation_thread.py     # QThread physics loop (500 Hz loop, real-time synchronized)
     data/

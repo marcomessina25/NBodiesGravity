@@ -1,9 +1,17 @@
 from __future__ import annotations
-import numpy as np
 from dataclasses import dataclass
+import numpy as np
+
 from .body import CelestialBody, BodyState, CollisionEvent
 from .exceptions import NumericalIntegrityError, ComputationalBudgetExceededError
-from .integrator import VelocityVerletIntegrator, SOFTENING
+from .integrator import (
+    Integrator,
+    IntegratorConfig,
+    VelocityVerletIntegrator,
+    create_integrator,
+    SOFTENING,
+)
+from .physics import PhysicsConfig, CollisionConfig
 
 #: Kilometres per Astronomical Unit — converts km radii to AU for collision tests.
 KM_PER_AU: float = 1.495978707e8
@@ -40,6 +48,23 @@ class TimeStepConfig:
             raise ValueError(f"safety_factor must be positive, got {self.safety_factor}")
         if self.max_substeps <= 0:
             raise ValueError(f"max_substeps must be positive, got {self.max_substeps}")
+
+    def to_dict(self) -> dict:
+        return {
+            "min_dt": float(self.min_dt),
+            "max_dt": float(self.max_dt),
+            "safety_factor": float(self.safety_factor),
+            "max_substeps": int(self.max_substeps),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> TimeStepConfig:
+        return cls(
+            min_dt=float(data.get("min_dt", 1e-5)),
+            max_dt=float(data.get("max_dt", 1.0)),
+            safety_factor=float(data.get("safety_factor", 0.01)),
+            max_substeps=int(data.get("max_substeps", 10_000)),
+        )
 
 
 def compute_adaptive_dt(
@@ -81,6 +106,9 @@ def compute_adaptive_dt(
 class SolarSystem:
     """Owns a collection of CelestialBody objects and advances them in time.
 
+    Supports pluggable integrators, configurable physical models, adaptive timestepping,
+    and center-of-mass conserving collisions.
+
     add_body / remove_body must only be called while the SimulationThread
     is paused — they are not thread-safe.
 
@@ -92,18 +120,107 @@ class SolarSystem:
         self,
         bodies: list[CelestialBody],
         timestep_config: TimeStepConfig | None = None,
-        softening: float = SOFTENING,
+        softening: float | None = None,
+        integrator: Integrator | None = None,
+        integrator_config: IntegratorConfig | None = None,
+        physics_config: PhysicsConfig | None = None,
+        collision_config: CollisionConfig | None = None,
     ) -> None:
         self._bodies: list[CelestialBody] = list(bodies)
         self._timestep_config = timestep_config if timestep_config is not None else TimeStepConfig()
-        self._integrator = VelocityVerletIntegrator(softening=softening)
+
+        # Physics configuration
+        if physics_config is not None:
+            self._physics_config = physics_config
+        else:
+            soft_val = softening if softening is not None else SOFTENING
+            self._physics_config = PhysicsConfig(softening_length=soft_val)
+
+        # Collision configuration
+        self._collision_config = collision_config if collision_config is not None else CollisionConfig()
+
+        # Integrator initialization
+        if integrator is not None:
+            self._integrator = integrator
+            self._integrator_config = IntegratorConfig(
+                name=getattr(integrator, "name", "velocity_verlet"),
+                softening=integrator.softening,
+                max_displacement=integrator.max_displacement,
+            )
+        elif integrator_config is not None:
+            self._integrator_config = integrator_config
+            self._integrator = create_integrator(integrator_config)
+        else:
+            soft_val = softening if softening is not None else self._physics_config.softening_length
+            self._integrator_config = IntegratorConfig(name="velocity_verlet", softening=soft_val)
+            self._integrator = VelocityVerletIntegrator(softening=soft_val)
+
         self._last_substeps: int = 0
         self._cumulative_substeps: int = 0
         self._last_adaptive_dt: float = 0.0
+        self._collision_history: list[CollisionEvent] = []
 
     @property
     def softening(self) -> float:
         return self._integrator.softening
+
+    @property
+    def integrator(self) -> Integrator:
+        return self._integrator
+
+    @property
+    def integrator_config(self) -> IntegratorConfig:
+        return self._integrator_config
+
+    def set_integrator(
+        self, integrator_or_config: Integrator | IntegratorConfig | str
+    ) -> None:
+        """Switch active integrator cleanly without modifying body states."""
+        if isinstance(integrator_or_config, Integrator):
+            self._integrator = integrator_or_config
+            self._integrator_config = IntegratorConfig(
+                name=getattr(integrator_or_config, "name", "velocity_verlet"),
+                softening=integrator_or_config.softening,
+                max_displacement=integrator_or_config.max_displacement,
+            )
+        elif isinstance(integrator_or_config, IntegratorConfig):
+            self._integrator_config = integrator_or_config
+            self._integrator = create_integrator(integrator_or_config)
+        elif isinstance(integrator_or_config, str):
+            self._integrator_config = IntegratorConfig(name=integrator_or_config, softening=self.softening)
+            self._integrator = create_integrator(self._integrator_config)
+        else:
+            raise TypeError(f"Invalid integrator specification type: {type(integrator_or_config)}")
+
+    @property
+    def physics_config(self) -> PhysicsConfig:
+        return self._physics_config
+
+    @physics_config.setter
+    def physics_config(self, config: PhysicsConfig) -> None:
+        self._physics_config = config
+        # Update integrator softening if altered in physics config
+        if config.softening_length != self._integrator.softening:
+            self.set_integrator(
+                IntegratorConfig(
+                    name=self._integrator_config.name,
+                    softening=config.softening_length,
+                    max_displacement=self._integrator_config.max_displacement,
+                    parameters=self._integrator_config.parameters,
+                )
+            )
+
+    @property
+    def collision_config(self) -> CollisionConfig:
+        return self._collision_config
+
+    @collision_config.setter
+    def collision_config(self, config: CollisionConfig) -> None:
+        self._collision_config = config
+
+    @property
+    def collision_history(self) -> list[CollisionEvent]:
+        return list(self._collision_history)
 
     @property
     def last_substeps(self) -> int:
@@ -131,7 +248,7 @@ class SolarSystem:
         self._timestep_config = config
 
     def clone(self) -> SolarSystem:
-        """Return a deep copy of the system and its bodies."""
+        """Return a deep copy of the system, bodies, and configuration."""
         bodies = [
             CelestialBody(
                 name=b.name,
@@ -150,7 +267,9 @@ class SolarSystem:
         return SolarSystem(
             bodies,
             timestep_config=self._timestep_config,
-            softening=self._integrator.softening,
+            integrator=create_integrator(self._integrator_config),
+            physics_config=self._physics_config,
+            collision_config=self._collision_config,
         )
 
     @property
@@ -159,7 +278,7 @@ class SolarSystem:
         return list(self._bodies)
 
     def step(self, dt: float) -> list[CollisionEvent]:
-        """Advance all *active* bodies by dt days using Velocity Verlet.
+        """Advance all *active* bodies by dt days using active integrator.
 
         Handles high-velocity / tight orbits (like moons) by dynamically
         sub-stepping the integration step to maintain accuracy.
@@ -208,7 +327,51 @@ class SolarSystem:
             body.pos = positions[i]
             body.vel = velocities[i]
 
-        return self._resolve_collisions()
+        events = self._resolve_collisions()
+        self._collision_history.extend(events)
+        return events
+
+    def step_once(self, dt: float | None = None) -> list[CollisionEvent]:
+        """Advance all active bodies by exactly one substep.
+
+        If dt is None, evaluates adaptive dt from orbital timescales.
+        """
+        active = [b for b in self._bodies if b.active]
+        if not active:
+            self._last_substeps = 0
+            self._last_adaptive_dt = 0.0
+            return []
+
+        positions  = np.array([b.pos for b in active], dtype=float)
+        velocities = np.array([b.vel for b in active], dtype=float)
+        masses     = np.array([b.mass for b in active], dtype=float)
+
+        step_dt = dt if dt is not None else compute_adaptive_dt(positions, masses, self._timestep_config)
+        if step_dt <= 0 or not np.isfinite(step_dt):
+            raise NumericalIntegrityError(f"Step dt must be positive and finite, got {step_dt}")
+
+        positions, velocities = self._integrator.step(
+            positions, velocities, masses, step_dt
+        )
+        self._last_substeps = 1
+        self._cumulative_substeps += 1
+        self._last_adaptive_dt = step_dt
+
+        for i, body in enumerate(active):
+            body.pos = positions[i]
+            body.vel = velocities[i]
+
+        events = self._resolve_collisions()
+        self._collision_history.extend(events)
+        return events
+
+    def advance(self, duration: float) -> list[CollisionEvent]:
+        """Advance simulation by a total duration in days using adaptive stepping."""
+        if duration < 0 or not np.isfinite(duration):
+            raise NumericalIntegrityError(f"Advance duration must be non-negative and finite, got {duration}")
+        if duration == 0:
+            return []
+        return self.step(duration)
 
     def _resolve_collisions(self) -> list[CollisionEvent]:
         """Merge any active bodies whose centres overlap (sum of physical radii).
@@ -218,6 +381,9 @@ class SolarSystem:
         radius grows by equal-density volume. Loops until no overlapping pair remains so
         chains collapse in a single call. Returns one CollisionEvent per merge performed.
         """
+        if not self._collision_config.enabled or self._collision_config.model == "ignore":
+            return []
+
         # Vectorized candidate pre-check: if no active bodies overlap, return immediately
         active = [b for b in self._bodies if b.active]
         n = len(active)
@@ -243,9 +409,6 @@ class SolarSystem:
             for i in range(len(active)):
                 for j in range(i + 1, len(active)):
                     bi, bj = active[i], active[j]
-                    # NaN/inf positions (blown-up bodies) are intentionally not handled here:
-                    # a NaN distance makes `dist < threshold` False, so they are silently skipped.
-                    # Blow-up is detected and reported separately by SimulationThread.blow_up_detected.
                     dist = float(np.linalg.norm(bi.pos - bj.pos))
                     threshold = (bi.radius + bj.radius) / KM_PER_AU
                     if dist < threshold and (closest is None or dist < closest[0]):

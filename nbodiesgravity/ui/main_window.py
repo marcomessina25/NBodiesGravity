@@ -10,11 +10,16 @@ from PyQt6.QtWidgets import (
     QProgressDialog, QFileDialog, QMessageBox, QStatusBar,
 )
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QActionGroup
 
 from nbodiesgravity.data.loader import load_default_system
 from nbodiesgravity.engine.body import CelestialBody
-from nbodiesgravity.engine.system import SolarSystem
+from nbodiesgravity.engine.system import SolarSystem, TimeStepConfig
 from nbodiesgravity.engine.simulation_thread import SimulationThread
+from nbodiesgravity.engine.presets import get_preset
+from nbodiesgravity.engine.checkpoints import SimulationCheckpoint
+from nbodiesgravity.engine.integrator import IntegratorConfig
+from nbodiesgravity.engine.physics import PhysicsConfig, CollisionConfig
 from nbodiesgravity.rendering.display_info import BodyDisplayInfo
 from nbodiesgravity.rendering.gl_widget import GLWidget
 from nbodiesgravity.ui.body_editor_dialog import BodyEditorDialog
@@ -83,6 +88,7 @@ class MainWindow(QMainWindow):
         self._ctrl.clear_trails_requested.connect(self._gl.clear_trails)
         self._ctrl.center_changed.connect(lambda _: self._gl.clear_trails())
         self._ctrl.show_names_toggled.connect(self._on_show_names_toggled_from_ctrl)
+        self._ctrl.step_requested.connect(self._on_step_once)
         self._ctrl.restart_requested.connect(self._on_restart)
         self._ctrl.top_view_requested.connect(self._on_top_view)
         
@@ -100,9 +106,42 @@ class MainWindow(QMainWindow):
         fm.addAction("Load System…",     self._load_from_file)
         fm.addAction("Save System…",     self._save_to_file)
         fm.addSeparator()
+
+        preset_menu = fm.addMenu("Load &Preset")
+        preset_menu.addAction("Default Solar System (J2000)", self._new_system)
+        preset_menu.addSeparator()
+        preset_menu.addAction("Circular Two-Body", lambda: self._on_load_preset("circular_two_body"))
+        preset_menu.addAction("Eccentric Two-Body", lambda: self._on_load_preset("eccentric_two_body"))
+        preset_menu.addAction("Oriented Two-Body", lambda: self._on_load_preset("oriented_two_body"))
+        preset_menu.addAction("Earth-Moon System", lambda: self._on_load_preset("earth_moon"))
+        preset_menu.addAction("Equal-Mass Binary Star", lambda: self._on_load_preset("binary_star"))
+        preset_menu.addAction("Restricted Three-Body (L4)", lambda: self._on_load_preset("restricted_three_body", lagrange_point="L4"))
+        preset_menu.addAction("Restricted Three-Body (L5)", lambda: self._on_load_preset("restricted_three_body", lagrange_point="L5"))
+
+        fm.addSeparator()
+        fm.addAction("Save Checkpoint…", self._save_checkpoint)
+        fm.addAction("Load Checkpoint…", self._load_checkpoint)
+        fm.addSeparator()
         fm.addAction("E&xit",            self.close)
 
         sm = mb.addMenu("&Simulation")
+        itg_menu = sm.addMenu("&Integrator")
+        self._action_verlet = itg_menu.addAction("Velocity Verlet [Validated Baseline]")
+        self._action_verlet.setCheckable(True)
+        self._action_verlet.setChecked(True)
+        self._action_verlet.triggered.connect(lambda: self._set_integrator("velocity_verlet"))
+
+        self._action_leapfrog = itg_menu.addAction("Leapfrog [Kick-Drift-Kick Alternative]")
+        self._action_leapfrog.setCheckable(True)
+        self._action_leapfrog.triggered.connect(lambda: self._set_integrator("leapfrog"))
+
+        self._itg_group = QActionGroup(self)
+        self._itg_group.addAction(self._action_verlet)
+        self._itg_group.addAction(self._action_leapfrog)
+        self._itg_group.setExclusive(True)
+
+        sm.addAction("Step Once",        self._on_step_once)
+        sm.addSeparator()
         sm.addAction("Add Body…",        self._add_body)
         sm.addAction("Edit Selected…",   lambda: self._edit_body(self._body_list.selected_name()))
         sm.addAction("Remove Selected",  self._remove_selected)
@@ -172,6 +211,7 @@ class MainWindow(QMainWindow):
             self._diag_dialog._populate_body_combos()
             self._diag_dialog._update_conservation_view()
             self._diag_dialog._update_orbital_view()
+        self._update_experimental_indicator()
         self.statusBar().showMessage(f"Loaded {len(system.bodies)} bodies.")
 
     # ----------------------------------------------------------------
@@ -267,6 +307,83 @@ class MainWindow(QMainWindow):
         if self._initial_system is not None:
             self._load_system(self._initial_system.clone(), epoch=self._initial_epoch, is_restart=True)
             self.statusBar().showMessage("Simulation restarted.")
+
+    def _on_step_once(self) -> None:
+        if self._sim is None:
+            return
+        if self._sim.is_playing:
+            self._sim.pause()
+            self._ctrl.set_playing(False)
+        self._sim.step_once()
+        self._update_sim_date()
+        self._refresh_after_body_change()
+
+    def _on_load_preset(self, preset_key: str, **kwargs) -> None:
+        try:
+            preset = get_preset(preset_key, **kwargs)
+            system = preset.create_system()
+            self._load_system(system, epoch=preset.epoch)
+            self.statusBar().showMessage(f"Loaded preset: {preset.name}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Preset Load Error", f"Cannot load preset:\n{exc}")
+
+    def _save_checkpoint(self) -> None:
+        if self._sim is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save Simulation Checkpoint", "", "JSON (*.json)")
+        if not path:
+            return
+        was_playing = self._sim.is_playing
+        self._sim.pause()
+        self._ctrl.set_playing(False)
+        try:
+            chk = SimulationCheckpoint.create(
+                self._sim.system,
+                self._last_epoch,
+                self._sim.elapsed_days,
+                metadata={"application_version": "0.9.0"},
+            )
+            chk.save(path)
+            self.statusBar().showMessage(f"Saved checkpoint to {Path(path).name}")
+        finally:
+            if was_playing:
+                self._sim.resume()
+                self._ctrl.set_playing(True)
+
+    def _load_checkpoint(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Load Simulation Checkpoint", "", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            chk = SimulationCheckpoint.load(path)
+            system, epoch, elapsed, _ = chk.restore()
+            self._load_system(system, epoch=epoch)
+            self._sim._elapsed_days = elapsed
+            self._update_sim_date()
+            self.statusBar().showMessage(f"Loaded checkpoint at day {elapsed:.2f}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Checkpoint Load Error", f"Cannot load checkpoint:\n{exc}")
+
+    def _set_integrator(self, name: str) -> None:
+        if self._sim is None:
+            return
+        with self._sim._lock:
+            self._sim.system.set_integrator(name)
+        self._update_experimental_indicator()
+        if self._diag_dialog is not None:
+            self._diag_dialog._update_conservation_view()
+        self.statusBar().showMessage(f"Integrator set to {name.replace('_', ' ').title()}")
+
+    def _update_experimental_indicator(self) -> None:
+        if self._sim is None:
+            return
+        itg_name = getattr(self._sim.system.integrator, "name", "velocity_verlet")
+        if itg_name == "velocity_verlet":
+            self.setWindowTitle("N-Body Gravity Simulation")
+            self._action_verlet.setChecked(True)
+        else:
+            self.setWindowTitle(f"N-Body Gravity Simulation [Experimental Mode: {itg_name.title()}]")
+            self._action_leapfrog.setChecked(True)
 
     # ----------------------------------------------------------------
     # Body editor slots
@@ -561,6 +678,10 @@ class MainWindow(QMainWindow):
             data = {
                 "format_version": 1,
                 "epoch": current_date.strftime("%Y-%m-%d"),
+                "timestep_config": self._sim.system.timestep_config.to_dict(),
+                "integrator_config": self._sim.system.integrator_config.to_dict(),
+                "physics_config": self._sim.system.physics_config.to_dict(),
+                "collision_config": self._sim.system.collision_config.to_dict(),
                 "bodies": [
                     {
                         "name": b.name,
@@ -616,7 +737,19 @@ class MainWindow(QMainWindow):
                 )
                 for e in data["bodies"]
             ]
-            self._load_system(SolarSystem(bodies), epoch=epoch)
+            t_cfg = TimeStepConfig.from_dict(data.get("timestep_config", {})) if "timestep_config" in data else None
+            itg_cfg = IntegratorConfig.from_dict(data.get("integrator_config", {})) if "integrator_config" in data else None
+            phy_cfg = PhysicsConfig.from_dict(data.get("physics_config", {})) if "physics_config" in data else None
+            col_cfg = CollisionConfig.from_dict(data.get("collision_config", {})) if "collision_config" in data else None
+
+            system = SolarSystem(
+                bodies=bodies,
+                timestep_config=t_cfg,
+                integrator_config=itg_cfg,
+                physics_config=phy_cfg,
+                collision_config=col_cfg,
+            )
+            self._load_system(system, epoch=epoch)
         except (KeyError, ValueError, json.JSONDecodeError) as exc:
             QMessageBox.critical(self, "Load Error", f"Cannot parse file:\n{exc}")
 

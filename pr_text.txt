@@ -1,0 +1,68 @@
+# PR: NBodiesGravity v0.9.0 — Advanced Simulation Capabilities, Pluggable Integrators, Presets, Checkpoints & Pre-v1.0 Hardening
+
+## Overview
+
+This pull request delivers the **v0.9.0** release of NBodiesGravity, completing all objectives and acceptance criteria defined in [`docs/specs/v09.md`](docs/specs/v09.md) and [`docs/roadmap.md`](docs/roadmap.md).
+
+Version 0.9 turns the validated v0.8 numerical engine into a flexible scientific simulation framework while strictly preserving the validated Velocity Verlet Newtonian solver as the default reference baseline:
+> *"Keep the validated Newtonian + Velocity Verlet engine as the trusted baseline, while introducing explicit extension points for alternative integrators, initial-condition presets, reproducible experiments, and controlled physical-model variations."*
+
+---
+
+## Key Workstreams & Implemented Features
+
+### 1. Pluggable Symplectic Integrator Architecture (`nbodiesgravity/engine/integrator.py`)
+- **`Integrator` Protocol & `IntegratorConfig`**: Formal interface for numerical steppers (`name`, `step(system, dt)`, `reset()`).
+- **Integrator Registry & Factory**: `create_integrator()` instantiates registered integrators dynamically.
+- **Velocity Verlet Baseline**: Refactored to implement the `Integrator` protocol with substep acceleration reuse and softening preserved.
+- **Alternative Integrator — Kick-Drift-Kick Leapfrog (`LeapfrogIntegrator`)**: Implemented second-order symplectic Leapfrog. Trajectories match Velocity Verlet within floating-point precision ($< 10^{-14}$) for position-dependent forces with identical second-order convergence and acceleration reuse.
+
+### 2. Analytical Initial-Condition Presets (`nbodiesgravity/engine/presets.py`)
+- **`InitialConditionSet` & Preset Registry**: Provides 6 deterministic analytical initial-condition presets:
+  - `circular_two_body`: Two equal masses in circular Keplerian orbit with exact orbital velocity.
+  - `eccentric_two_body`: Keplerian orbit with eccentricity $e=0.5$ and vis-viva periapsis velocity.
+  - `oriented_two_body`: Two-body system rotated in 3D ($i=45^\circ, \Omega=30^\circ, \omega=60^\circ$).
+  - `earth_moon`: Geocentric Earth-Moon system with fine substep configuration.
+  - `binary_star`: Equal-mass binary star system orbiting their mutual barycenter.
+  - `restricted_three_body`: Circular restricted three-body system with primaries and test particles placed at triangular Lagrange points $L_4$ and $L_5$ in exact co-orbital equilibrium.
+- **Preset UI**: Added *File → Load Preset…* dialog with system descriptions and instant loading.
+
+### 3. Checkpoints, Reproducibility & Replay Harness (`nbodiesgravity/engine/checkpoints.py`, `nbodiesgravity/engine/experiments.py`)
+- **Versioned Checkpoints**: `SimulationCheckpoint` (`schema_version=2`, `checkpoint_version=1`) with bitwise IEEE 754 restoration of coordinates, velocities, masses, radii, labels, and all physical configurations.
+- **UI Integration**: Added *File → Save Checkpoint…* and *File → Load Checkpoint…*.
+- **Deterministic Replay Harness**: `run_experiment()` runs headless experiments over exact simulation times with trajectory capturing and conservation tracking.
+
+### 4. Explicit Physical & Collision Models (`nbodiesgravity/engine/physics.py`)
+- **`PhysicsConfig`**: Configurable gravitational constant $G$, softening length $\varepsilon$, gravity model (`newtonian`), and softening model (`plummer`).
+- **`CollisionConfig`**: Configurable collision handling (`enabled`, model `merge`).
+- **Collision Event Tracking**: Logs collision events (`absorbed_body`, `survivor_body`, epoch) accessible through system properties.
+
+### 5. Controlled Stepping & UI Transparency
+- **Step-by-Step Physics Controls**:
+  - `step_once()` advances physics by a single discrete timestep and pauses.
+  - Added "Step" button to `ControlPanel` and *Simulation → Step Once* action (shortcut `Space` / `F10` when paused).
+  - Duration-bounded integration (`advance(duration)`) and maximum simulation time limit (`max_simulation_time`).
+- **Integrator Switching & Model Transparency**:
+  - *Simulation → Integrator* submenu with radio actions for `Velocity Verlet [Validated Baseline]` and `Leapfrog`.
+  - Window title banner alerts user when non-default configurations are active (`[EXPERIMENTAL CONFIGURATION: Leapfrog]`).
+  - `ScientificDiagnosticsDialog` live readouts for active integrator, gravity model, collision model, and collision events.
+
+### 6. Backward Compatibility & Test Suite Expansion
+- Backward-compatible loader supports legacy v0.5, v0.6, v0.7, and v0.8 saves alongside new v0.9 files.
+- Added 40 new automated tests covering Leapfrog integration, integrator factory, presets, checkpoints, reproducibility, controlled stepping, cross-integrator convergence, and UI integration.
+- Full test suite: **210 passed in ~12 seconds**.
+
+---
+
+## Verification & Test Results
+
+```powershell
+conda run -n nbodiesgravity pytest -q
+```
+```text
+210 passed in 12.39s
+```
+
+All benchmark tests pass with zero performance regression against the v0.8 baseline:
+- Solar System (39 bodies): ~103 steps/s (~21,000 substeps/s).
+- Scalability benchmarks ($N=2$ to $N=500$) verified.

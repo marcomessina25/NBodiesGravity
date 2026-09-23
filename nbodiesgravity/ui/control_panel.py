@@ -22,6 +22,7 @@ class ControlPanel(QWidget):
     timescale_changed = pyqtSignal(float)     # simulated days per real second
     center_changed = pyqtSignal(str)          # new center body name
     play_toggled = pyqtSignal(bool)           # True = playing
+    step_requested = pyqtSignal()             # user clicked "Step"
     clear_trails_requested = pyqtSignal()     # user clicked "Clear Trails"
     show_names_toggled = pyqtSignal(bool)     # True = show names
     restart_requested = pyqtSignal()          # user clicked "Restart"
@@ -54,6 +55,11 @@ class ControlPanel(QWidget):
         self._play_btn.setFixedWidth(90)
         self._play_btn.clicked.connect(self._on_play_clicked)
         layout.addWidget(self._play_btn)
+
+        self._step_btn = QPushButton("⏭  Step")
+        self._step_btn.setFixedWidth(75)
+        self._step_btn.clicked.connect(self.step_requested)
+        layout.addWidget(self._step_btn)
 
         self._restart_btn = QPushButton("↺  Restart")
         self._restart_btn.setFixedWidth(90)
@@ -121,6 +127,7 @@ class ControlPanel(QWidget):
     def set_playing(self, playing: bool) -> None:
         self._playing = playing
         self._play_btn.setText("⏸  Pause" if playing else "▶  Play")
+        self._step_btn.setEnabled(not playing)
 
     def set_sim_date(self, text: str) -> None:
         """Update the live simulation date label. Call with a 'YYYY-MM-DD' string."""
