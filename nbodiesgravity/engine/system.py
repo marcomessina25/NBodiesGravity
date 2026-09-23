@@ -9,6 +9,7 @@ from .integrator import (
     IntegratorConfig,
     VelocityVerletIntegrator,
     create_integrator,
+    G_AU_DAY,
     SOFTENING,
 )
 from .physics import PhysicsConfig, CollisionConfig
@@ -68,7 +69,10 @@ class TimeStepConfig:
 
 
 def compute_adaptive_dt(
-    positions: np.ndarray, masses: np.ndarray, config: TimeStepConfig | None = None
+    positions: np.ndarray,
+    masses: np.ndarray,
+    config: TimeStepConfig | None = None,
+    g_constant: float = G_AU_DAY,
 ) -> float:
     """Compute adaptive timestep (in days) based on shortest orbital timescale.
 
@@ -90,10 +94,8 @@ def compute_adaptive_dt(
     dist_cb = dist_sq * np.sqrt(dist_sq)
     mass_sum = masses[i_idx] + masses[j_idx]
 
-    from .integrator import G_AU_DAY
-    
     with np.errstate(divide='ignore', invalid='ignore'):
-        t_orb = 2.0 * np.pi * np.sqrt(dist_cb / (G_AU_DAY * mass_sum + 1e-30))
+        t_orb = 2.0 * np.pi * np.sqrt(dist_cb / (g_constant * mass_sum + 1e-30))
 
     min_t_orb = np.nanmin(t_orb)
     if np.isfinite(min_t_orb):
@@ -136,24 +138,44 @@ class SolarSystem:
             soft_val = softening if softening is not None else SOFTENING
             self._physics_config = PhysicsConfig(softening_length=soft_val)
 
+        g_val = self._physics_config.gravitational_constant
+        soft_val = self._physics_config.softening_length
+
         # Collision configuration
         self._collision_config = collision_config if collision_config is not None else CollisionConfig()
 
         # Integrator initialization
         if integrator is not None:
             self._integrator = integrator
+            if hasattr(integrator, "g_constant") and physics_config is not None:
+                try:
+                    integrator.g_constant = g_val
+                except (AttributeError, TypeError):
+                    pass
             self._integrator_config = IntegratorConfig(
                 name=getattr(integrator, "name", "velocity_verlet"),
                 softening=integrator.softening,
                 max_displacement=integrator.max_displacement,
+                g_constant=getattr(integrator, "g_constant", g_val),
             )
         elif integrator_config is not None:
+            if physics_config is not None and integrator_config.g_constant != g_val:
+                integrator_config = IntegratorConfig(
+                    name=integrator_config.name,
+                    softening=integrator_config.softening,
+                    max_displacement=integrator_config.max_displacement,
+                    g_constant=g_val,
+                    parameters=integrator_config.parameters,
+                )
             self._integrator_config = integrator_config
             self._integrator = create_integrator(integrator_config)
         else:
-            soft_val = softening if softening is not None else self._physics_config.softening_length
-            self._integrator_config = IntegratorConfig(name="velocity_verlet", softening=soft_val)
-            self._integrator = VelocityVerletIntegrator(softening=soft_val)
+            self._integrator_config = IntegratorConfig(
+                name="velocity_verlet",
+                softening=soft_val,
+                g_constant=g_val,
+            )
+            self._integrator = VelocityVerletIntegrator(softening=soft_val, g_constant=g_val)
 
         self._last_substeps: int = 0
         self._cumulative_substeps: int = 0
@@ -176,18 +198,37 @@ class SolarSystem:
         self, integrator_or_config: Integrator | IntegratorConfig | str
     ) -> None:
         """Switch active integrator cleanly without modifying body states."""
+        g_val = self._physics_config.gravitational_constant
         if isinstance(integrator_or_config, Integrator):
             self._integrator = integrator_or_config
+            if hasattr(integrator_or_config, "g_constant"):
+                try:
+                    integrator_or_config.g_constant = g_val
+                except (AttributeError, TypeError):
+                    pass
             self._integrator_config = IntegratorConfig(
                 name=getattr(integrator_or_config, "name", "velocity_verlet"),
                 softening=integrator_or_config.softening,
                 max_displacement=integrator_or_config.max_displacement,
+                g_constant=getattr(integrator_or_config, "g_constant", g_val),
             )
         elif isinstance(integrator_or_config, IntegratorConfig):
+            if integrator_or_config.g_constant != g_val:
+                integrator_or_config = IntegratorConfig(
+                    name=integrator_or_config.name,
+                    softening=integrator_or_config.softening,
+                    max_displacement=integrator_or_config.max_displacement,
+                    g_constant=g_val,
+                    parameters=integrator_or_config.parameters,
+                )
             self._integrator_config = integrator_or_config
             self._integrator = create_integrator(integrator_or_config)
         elif isinstance(integrator_or_config, str):
-            self._integrator_config = IntegratorConfig(name=integrator_or_config, softening=self.softening)
+            self._integrator_config = IntegratorConfig(
+                name=integrator_or_config,
+                softening=self.softening,
+                g_constant=g_val,
+            )
             self._integrator = create_integrator(self._integrator_config)
         else:
             raise TypeError(f"Invalid integrator specification type: {type(integrator_or_config)}")
@@ -199,16 +240,16 @@ class SolarSystem:
     @physics_config.setter
     def physics_config(self, config: PhysicsConfig) -> None:
         self._physics_config = config
-        # Update integrator softening if altered in physics config
-        if config.softening_length != self._integrator.softening:
-            self.set_integrator(
-                IntegratorConfig(
-                    name=self._integrator_config.name,
-                    softening=config.softening_length,
-                    max_displacement=self._integrator_config.max_displacement,
-                    parameters=self._integrator_config.parameters,
-                )
+        # Update integrator softening and g_constant if altered in physics config
+        self.set_integrator(
+            IntegratorConfig(
+                name=self._integrator_config.name,
+                softening=config.softening_length,
+                max_displacement=self._integrator_config.max_displacement,
+                g_constant=config.gravitational_constant,
+                parameters=self._integrator_config.parameters,
             )
+        )
 
     @property
     def collision_config(self) -> CollisionConfig:
@@ -300,7 +341,9 @@ class SolarSystem:
         velocities = np.array([b.vel for b in active], dtype=float)
         masses     = np.array([b.mass for b in active], dtype=float)
 
-        max_step = compute_adaptive_dt(positions, masses, self._timestep_config)
+        max_step = compute_adaptive_dt(
+            positions, masses, self._timestep_config, g_constant=self._physics_config.gravitational_constant
+        )
 
         remaining = dt
         substeps = 0
@@ -346,7 +389,9 @@ class SolarSystem:
         velocities = np.array([b.vel for b in active], dtype=float)
         masses     = np.array([b.mass for b in active], dtype=float)
 
-        step_dt = dt if dt is not None else compute_adaptive_dt(positions, masses, self._timestep_config)
+        step_dt = dt if dt is not None else compute_adaptive_dt(
+            positions, masses, self._timestep_config, g_constant=self._physics_config.gravitational_constant
+        )
         if step_dt <= 0 or not np.isfinite(step_dt):
             raise NumericalIntegrityError(f"Step dt must be positive and finite, got {step_dt}")
 

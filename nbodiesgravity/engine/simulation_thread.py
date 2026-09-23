@@ -51,7 +51,11 @@ class SimulationThread(QThread):
         self.latest_snapshot: list[BodyState] = system.snapshot()
         self._elapsed_days: float = 0.0
         self._max_simulation_time: float | None = None
-        self._tracker = ConservationTracker(system.bodies, softening=system.softening)
+        self._tracker = ConservationTracker(
+            system.bodies,
+            softening=system.softening,
+            g_constant=system.physics_config.gravitational_constant,
+        )
         self._history = DiagnosticsHistoryBuffer(max_points=2000)
         self._latest_report: DiagnosticReport | None = None
         self._last_diag_time: float = 0.0
@@ -104,7 +108,11 @@ class SimulationThread(QThread):
         with self._lock:
             self._system = system
             self.latest_snapshot = system.snapshot()
-            self._tracker = ConservationTracker(system.bodies, softening=system.softening)
+            self._tracker = ConservationTracker(
+                system.bodies,
+                softening=system.softening,
+                g_constant=system.physics_config.gravitational_constant,
+            )
             self._history.clear()
             self._latest_report = None
         self._elapsed_days = 0.0   # reset date counter to match the new epoch

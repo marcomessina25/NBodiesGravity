@@ -10,11 +10,12 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 
 ### Simulation Engine & High-Performance Numerics
 
-- **Pluggable Symplectic Integrator Architecture**: Decoupled numerical stepping via an explicit `Integrator` protocol and `IntegratorConfig`. Includes the **Velocity Verlet** integrator as the validated default baseline (with acceleration reuse) and second-order **Leapfrog** (kick-drift-kick) as an alternative symplectic integrator.
-- **Analytical Initial-Condition Presets**: Six scientifically defined deterministic presets (`circular_two_body`, `eccentric_two_body`, `oriented_two_body`, `earth_moon`, `binary_star`, `restricted_three_body` with L4/L5 Lagrange points) plus custom initial-condition registration.
-- **Deterministic Simulation Checkpoints & Replay**: Schema version 2 checkpoints capturing exact coordinates, velocities, masses, integrator configuration, and elapsed simulation time for bitwise-reproducible resumes and headless experiment replays.
+- **Pluggable Integrator Architecture**: Decoupled numerical stepping via an explicit `Integrator` protocol and `IntegratorConfig`. Includes the **Velocity Verlet** integrator as the validated default baseline and second-order **Leapfrog** (kick-drift-kick) as an alternative integrator (symplectic under fixed timestepping; adaptive second-order error control under variable timestepping).
+- **Analytical Initial-Condition Presets**: Six scientifically defined deterministic presets (`circular_two_body`, `eccentric_two_body`, `oriented_two_body`, `earth_moon`, `binary_star`, and `restricted_three_body` with analytical L4/L5 initial configuration for the idealized circular model) plus custom initial-condition registration.
+- **Deterministic Simulation Checkpoints & Replay**: Schema version 2 checkpoints capturing exact coordinates, velocities, masses, integrator configuration, and elapsed simulation time for deterministic floating-point checkpoint/resume with IEEE-754 double-precision state serialization and headless experiment replays.
 - **Controlled Stepping & Step-by-Step Analysis**: Single-step execution (`step_once`), duration-bounded integration (`advance`), and optional maximum simulation time limits.
-- N-body gravitational physics using a gravitational softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to handle close flybys smoothly.
+- **Configurable Physical Model**: Explicit `PhysicsConfig` (gravitational constant $G$ with complete engine and preset propagation) and `CollisionConfig` definitions, eliminating hardcoded hidden assumptions.
+- **Gravitational Softening**: Plummer-style softening parameter $\varepsilon = 10^{-4}\text{ AU}$ to regularize close flybys smoothly without singular divisions.
 - **Optimized $O(N^2)$ Pairwise Vectorization**: In-place distance scaling and einsum contractions eliminate intermediate NumPy allocations, achieving **2.2x to 9.6x speedups** while reproducing reference results within $< 10^{-15}$ relative error on the validated workloads.
 - **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet/Leapfrog substeps, halving expensive pairwise force evaluations in multi-substep integration.
 - **Upper-Triangle Adaptive Timestepping**: Vectorized timescale calculations using upper-triangle indices without full-matrix temporaries or diagonal masking overhead.
@@ -24,8 +25,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 - **Time-Window Selection & Plot Decimation**: Selectable historical view windows (All Retained History, Last 100 Days, Last 365 Days) with automatic plot decimation to guarantee responsive UI interactions regardless of buffer depth.
 - **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
-- **Decoupled Snapshot Architecture**: 500 Hz physics loop decoupled from rendering via throttled 120 Hz immutable snapshots, eliminating heap contention and GIL-safe state sharing.
-- Physics loop runs in a background QThread at **500 Hz**, keeping the UI fully responsive and fluid.
+- **Decoupled Snapshot Architecture**: 500 Hz physics background thread decoupled from rendering via throttled 120 Hz immutable snapshots, eliminating heap contention and ensuring thread-safe state sharing.
 - Time unit: **AU / days** in the Solar System Barycenter (SSB) frame.
 - Configurable timescale via a log-scale speed slider (1 h/s to 1 y/s).
 - **Blow-up detection**: simulation auto-pauses if any body drifts beyond 1000 AU from the origin.
@@ -180,7 +180,7 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
 
 - **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
-- **Verlet Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps during adaptive timestepping.
+- **Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps in Velocity Verlet and Leapfrog during adaptive timestepping.
 - **Upper-Triangle Adaptive Timestepping**: Vectorized timescale evaluation avoiding full-matrix temporaries.
 - **Decoupled 120 Hz Snapshot Cadence**: Throttles snapshot allocations to the render rate, keeping the 500 Hz physics loop unburdened.
 - **Cached OpenGL Shader Uniforms & Horizons I/O**: Eliminates redundant GPU uniform queries and disk reads.
@@ -235,7 +235,7 @@ nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
         body.py                  # CelestialBody (mutable) and BodyState (immutable snapshot)
-        checkpoints.py           # Simulation checkpoints with schema versioning and bitwise restoration
+        checkpoints.py           # Simulation checkpoints with schema versioning and deterministic restoration
         diagnostics.py           # Reusable scientific conservation metrics and DiagnosticsHistoryBuffer
         exceptions.py            # NumericalIntegrityError and budget exceptions
         experiments.py           # Experiment configuration, metadata tracking, and deterministic replay

@@ -62,3 +62,67 @@ def test_simulation_thread_controlled_stepping(qapp):
     prev_days = thread.elapsed_days
     thread.advance(2.0)
     assert np.isclose(thread.elapsed_days, prev_days + 2.0)
+
+
+def test_simulation_thread_max_simulation_time(qapp):
+    """Verify that max_simulation_time halts the physics loop and emits target_time_reached."""
+    import time
+    preset = get_preset("circular_two_body")
+    sys = preset.create_system()
+    thread = SimulationThread(sys)
+    thread.max_simulation_time = 0.2
+    thread.set_timescale(50.0)
+
+    target_times = []
+    thread.target_time_reached.connect(target_times.append)
+
+    thread.start()
+    thread.resume()
+
+    # Wait up to 3 seconds for target time to be reached
+    start_wait = time.perf_counter()
+    while thread.is_playing and time.perf_counter() - start_wait < 3.0:
+        qapp.processEvents()
+        time.sleep(0.01)
+
+    thread.stop_thread()
+    for _ in range(5):
+        qapp.processEvents()
+
+    assert not thread.is_playing
+    assert len(target_times) >= 1
+    assert np.isclose(thread.elapsed_days, 0.2, atol=1e-3)
+    assert np.isclose(target_times[0], 0.2, atol=1e-3)
+
+
+def test_simulation_thread_max_simulation_time_small_remainder(qapp):
+    """Verify that a limit smaller than the natural frame step clamps cleanly without overshoot."""
+    import time
+    preset = get_preset("circular_two_body")
+    sys = preset.create_system()
+    thread = SimulationThread(sys)
+    # A tiny limit: 0.002 days
+    thread.max_simulation_time = 0.002
+    thread.set_timescale(100.0)
+
+    target_times = []
+    thread.target_time_reached.connect(target_times.append)
+
+    thread.start()
+    thread.resume()
+
+    start_wait = time.perf_counter()
+    while thread.is_playing and time.perf_counter() - start_wait < 3.0:
+        qapp.processEvents()
+        time.sleep(0.01)
+
+    thread.stop_thread()
+    for _ in range(5):
+        qapp.processEvents()
+
+    assert not thread.is_playing
+    assert len(target_times) >= 1
+    assert np.isclose(thread.elapsed_days, 0.002, atol=1e-4)
+    assert thread.elapsed_days <= 0.00201  # No overshoot
+
+

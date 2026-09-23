@@ -1,7 +1,7 @@
 # NBodiesGravity v0.9 — Items Left Before Merge
 
 **Branch:** `v09`  
-**Status:** 🟠 Final corrective pass
+**Status:** 🟢 Complete (Merge-ready)
 
 ## 1. Executive Summary
 
@@ -66,14 +66,14 @@ Avoid a second hidden global source of truth.
 
 ## Acceptance criteria
 
-- [ ] Custom G changes gravitational acceleration.
-- [ ] Custom G changes adaptive timestep calculations consistently.
-- [ ] Default G produces existing v0.8 behaviour.
-- [ ] Velocity Verlet uses configured G.
-- [ ] Leapfrog uses configured G.
-- [ ] Checkpoints preserve configured G.
-- [ ] Replay preserves configured G.
-- [ ] No numerical path silently falls back to global `G_AU_DAY` when configured G exists.
+- [x] Custom G changes gravitational acceleration.
+- [x] Custom G changes adaptive timestep calculations consistently.
+- [x] Default G produces existing v0.8 behaviour.
+- [x] Velocity Verlet uses configured G.
+- [x] Leapfrog uses configured G.
+- [x] Checkpoints preserve configured G.
+- [x] Replay preserves configured G.
+- [x] No numerical path silently falls back to global `G_AU_DAY` when configured G exists.
 
 ---
 
@@ -96,10 +96,10 @@ Apply to:
 
 ## Acceptance criteria
 
-- [ ] Preset orbital velocities use configured G.
-- [ ] Default preset behaviour remains unchanged.
-- [ ] Custom-G presets remain internally consistent.
-- [ ] At least one analytical preset is tested under non-default G.
+- [x] Preset orbital velocities use configured G.
+- [x] Default preset behaviour remains unchanged.
+- [x] Custom-G presets remain internally consistent.
+- [x] At least one analytical preset is tested under non-default G.
 
 ---
 
@@ -174,9 +174,9 @@ or:
 
 Acceptance:
 
-- [ ] README corrected.
-- [ ] v0.9 spec corrected.
-- [ ] No unsupported cross-platform bitwise claim.
+- [x] README corrected.
+- [x] v0.9 spec corrected.
+- [x] No unsupported cross-platform bitwise claim.
 
 ---
 
@@ -330,21 +330,21 @@ Do not add to the v0.9 corrective pass:
 
 # 17. Final PR Checklist
 
-- [ ] Configured G is used by force calculation.
-- [ ] Configured G is used by adaptive timestep calculation.
-- [ ] Configured G is used by presets.
-- [ ] Default G remains unchanged.
-- [ ] Custom-G tests pass.
-- [ ] Checkpoint/replay preserves G.
-- [ ] Max simulation time is tested.
-- [ ] Symplectic terminology qualified.
-- [ ] Restricted-three-body/L4/L5 terminology qualified.
-- [ ] Numerical-model docs updated.
-- [ ] README cleaned.
-- [ ] Full pytest passes.
-- [ ] Performance regression checked.
-- [ ] Manual smoke test passes.
-- [ ] Final diff reviewed.
+- [x] Configured G is used by force calculation.
+- [x] Configured G is used by adaptive timestep calculation.
+- [x] Configured G is used by presets.
+- [x] Default G remains unchanged.
+- [x] Custom-G tests pass.
+- [x] Checkpoint/replay preserves G.
+- [x] Max simulation time is tested.
+- [x] Symplectic terminology qualified.
+- [x] Restricted-three-body/L4/L5 terminology qualified.
+- [x] Numerical-model docs updated.
+- [x] README cleaned.
+- [x] Full pytest passes.
+- [x] Performance regression checked.
+- [x] Manual smoke test passes.
+- [x] Final diff reviewed.
 
 ## Recommended corrective commit
 
@@ -355,3 +355,4 @@ fix(v0.9): honor configurable physics and tighten validation
 After this pass:
 
 **🟢 v0.9 merge-ready**
+

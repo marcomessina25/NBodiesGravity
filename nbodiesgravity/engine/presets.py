@@ -129,14 +129,17 @@ def create_circular_two_body(
     m2: float = M_EARTH,
     r: float = 1.0,
     name: str = "Circular Two-Body",
+    physics_config: PhysicsConfig | None = None,
 ) -> InitialConditionSet:
-    """Generate circular 2-body orbit in the barycentric frame."""
+    """Generate circular 2-body orbit in the barycentric frame using configured G."""
     if r <= 0:
         raise ValueError(f"Separation r must be positive, got {r}")
     if m1 <= 0 or m2 <= 0:
         raise ValueError("Masses must be positive.")
 
-    mu = G_AU_DAY * (m1 + m2)
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
+    mu = g * (m1 + m2)
     v_orb = float(np.sqrt(mu / r))
 
     mu1 = m2 / (m1 + m2)
@@ -158,6 +161,7 @@ def create_circular_two_body(
         description=f"Circular two-body system (r = {r:.2f} AU, m1 = {m1:.2e} kg, m2 = {m2:.2e} kg)",
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
+        physics_config=p_cfg,
     )
 
 
@@ -167,8 +171,9 @@ def create_eccentric_two_body(
     a: float = 1.0,
     e: float = 0.5,
     name: str = "Eccentric Two-Body",
+    physics_config: PhysicsConfig | None = None,
 ) -> InitialConditionSet:
-    """Generate eccentric 2-body orbit initialized at periapsis."""
+    """Generate eccentric 2-body orbit initialized at periapsis using configured G."""
     if a <= 0:
         raise ValueError(f"Semi-major axis a must be positive, got {a}")
     if not (0.0 <= e < 1.0):
@@ -176,8 +181,10 @@ def create_eccentric_two_body(
     if m1 <= 0 or m2 <= 0:
         raise ValueError("Masses must be positive.")
 
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
     r_peri = a * (1.0 - e)
-    mu = G_AU_DAY * (m1 + m2)
+    mu = g * (m1 + m2)
     # Vis-viva at periapsis: v_p = sqrt(mu * (2/r_p - 1/a)) = sqrt(mu * (1 + e) / (a * (1 - e)))
     v_peri = float(np.sqrt(mu * (1.0 + e) / (a * (1.0 - e))))
 
@@ -200,6 +207,7 @@ def create_eccentric_two_body(
         description=f"Eccentric two-body system (a = {a:.2f} AU, e = {e:.2f})",
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
+        physics_config=p_cfg,
     )
 
 
@@ -213,19 +221,23 @@ def create_oriented_two_body(
     arg_pe_deg: float = 60.0,
     true_anom_deg: float = 0.0,
     name: str = "Oriented Two-Body",
+    physics_config: PhysicsConfig | None = None,
 ) -> InitialConditionSet:
-    """Generate 3D oriented two-body system from Keplerian orbital elements."""
+    """Generate 3D oriented two-body system from Keplerian orbital elements using configured G."""
     if a <= 0:
         raise ValueError(f"Semi-major axis a must be positive, got {a}")
     if not (0.0 <= e < 1.0):
         raise ValueError(f"Eccentricity e must be in [0, 1), got {e}")
+
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
 
     inc = np.radians(inc_deg)
     lan = np.radians(lan_deg)
     arg_pe = np.radians(arg_pe_deg)
     nu = np.radians(true_anom_deg)
 
-    mu = G_AU_DAY * (m1 + m2)
+    mu = g * (m1 + m2)
     p = a * (1.0 - e ** 2)
     r = p / (1.0 + e * np.cos(nu))
 
@@ -271,17 +283,24 @@ def create_oriented_two_body(
         description=f"Oriented two-body orbit (i = {inc_deg}°, Ω = {lan_deg}°, ω = {arg_pe_deg}°)",
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
+        physics_config=p_cfg,
     )
 
 
-def create_earth_moon_preset(name: str = "Earth-Moon System") -> InitialConditionSet:
-    """Generate high-precision Earth-Moon analytical system."""
+def create_earth_moon_preset(
+    name: str = "Earth-Moon System",
+    physics_config: PhysicsConfig | None = None,
+) -> InitialConditionSet:
+    """Generate high-precision Earth-Moon analytical system using configured G."""
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
+
     m_earth = M_EARTH
     m_moon = M_MOON
     r_km = 384400.0
     r_au = r_km / KM_PER_AU
 
-    mu = G_AU_DAY * (m_earth + m_moon)
+    mu = g * (m_earth + m_moon)
     v_circ = float(np.sqrt(mu / r_au))
 
     mu1 = m_moon / (m_earth + m_moon)
@@ -307,6 +326,7 @@ def create_earth_moon_preset(name: str = "Earth-Moon System") -> InitialConditio
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
         timestep_config=t_cfg,
+        physics_config=p_cfg,
     )
 
 
@@ -315,12 +335,16 @@ def create_binary_star_preset(
     m2: float = M_SUN,
     separation: float = 2.0,
     name: str = "Equal-Mass Binary Star",
+    physics_config: PhysicsConfig | None = None,
 ) -> InitialConditionSet:
-    """Generate symmetric binary star system with comparable stellar masses."""
+    """Generate symmetric binary star system with comparable stellar masses using configured G."""
     if separation <= 0:
         raise ValueError(f"Separation must be positive, got {separation}")
 
-    mu = G_AU_DAY * (m1 + m2)
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
+
+    mu = g * (m1 + m2)
     v_orb = float(np.sqrt(mu / separation))
 
     r1 = separation * (m2 / (m1 + m2))
@@ -345,6 +369,7 @@ def create_binary_star_preset(
         description=f"Binary star system (separation = {separation:.2f} AU)",
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
+        physics_config=p_cfg,
     )
 
 
@@ -354,12 +379,20 @@ def create_restricted_three_body_preset(
     r: float = 5.2,         # 5.2 AU
     lagrange_point: str = "L4",
     name: str = "Restricted Three-Body (Lagrange)",
+    physics_config: PhysicsConfig | None = None,
 ) -> InitialConditionSet:
-    """Generate circular restricted three-body system with a Trojan test particle at L4 or L5."""
+    """Generate restricted-three-body-like system with a numerically negligible test particle.
+
+    Provides an analytical L4/L5 initial configuration for the idealized circular
+    restricted three-body model.
+    """
     if lagrange_point.upper() not in ("L4", "L5"):
         raise ValueError(f"lagrange_point must be 'L4' or 'L5', got '{lagrange_point}'")
 
-    mu = G_AU_DAY * (m1 + m2)
+    p_cfg = physics_config if physics_config is not None else PhysicsConfig()
+    g = p_cfg.gravitational_constant
+
+    mu = g * (m1 + m2)
     omega = np.sqrt(mu / (r ** 3))  # angular velocity
     v_circ = omega * r
 
@@ -395,9 +428,10 @@ def create_restricted_three_body_preset(
 
     return InitialConditionSet(
         name=name,
-        description=f"Restricted three-body equilibrium with test particle at {lagrange_point}",
+        description=f"Restricted-three-body-like system with a numerically negligible test particle at {lagrange_point} (analytical L4/L5 initial configuration for idealized circular model)",
         epoch=datetime(2000, 1, 1),
         bodies=bodies,
+        physics_config=p_cfg,
     )
 
 

@@ -67,7 +67,11 @@ class ExperimentConfig:
         and conservation drift metrics.
         """
         system = self.initial_conditions.create_system()
-        tracker = ConservationTracker(system.bodies, softening=system.softening)
+        tracker = ConservationTracker(
+            system.bodies,
+            softening=system.softening,
+            g_constant=system.physics_config.gravitational_constant,
+        )
 
         step_dt = 1.0
         remaining = self.target_duration

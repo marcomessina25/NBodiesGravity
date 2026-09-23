@@ -73,12 +73,15 @@ class IntegratorConfig:
         Plummer softening length in AU.
     max_displacement : float
         Safety displacement bound in AU.
+    g_constant : float
+        Gravitational constant in AU³ kg⁻¹ day⁻².
     parameters : dict
         Additional algorithm-specific parameters.
     """
     name: str = "velocity_verlet"
     softening: float = SOFTENING
     max_displacement: float = MAX_DISPLACEMENT_PER_STEP
+    g_constant: float = G_AU_DAY
     parameters: dict[str, float | int | str | bool] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -86,12 +89,15 @@ class IntegratorConfig:
             raise ValueError(f"softening must be non-negative and finite, got {self.softening}")
         if self.max_displacement <= 0 or not np.isfinite(self.max_displacement):
             raise ValueError(f"max_displacement must be positive and finite, got {self.max_displacement}")
+        if self.g_constant <= 0 or not np.isfinite(self.g_constant):
+            raise ValueError(f"g_constant must be positive and finite, got {self.g_constant}")
 
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "softening": float(self.softening),
             "max_displacement": float(self.max_displacement),
+            "g_constant": float(self.g_constant),
             "parameters": dict(self.parameters),
         }
 
@@ -101,6 +107,7 @@ class IntegratorConfig:
             name=str(data.get("name", "velocity_verlet")),
             softening=float(data.get("softening", SOFTENING)),
             max_displacement=float(data.get("max_displacement", MAX_DISPLACEMENT_PER_STEP)),
+            g_constant=float(data.get("g_constant", G_AU_DAY)),
             parameters=dict(data.get("parameters", {})),
         )
 
@@ -111,6 +118,7 @@ class Integrator(Protocol):
     name: str
     softening: float
     max_displacement: float
+    g_constant: float
 
     def step(
         self,
@@ -128,11 +136,16 @@ class Integrator(Protocol):
 
 
 class VelocityVerletIntegrator:
-    """Symplectic Velocity Verlet integrator (validated reference baseline).
+    """Second-order Velocity Verlet integrator (validated reference baseline).
 
-    Conserves orbital energy far better than plain Euler integration
-    over long time spans, making it suitable for multi-year simulations.
-    Second-order symplectic method with substep acceleration reuse support.
+    Formulation:
+    - Fixed timestep: Symplectic integrator preserving phase-space volume and
+      conserving a shadow Hamiltonian with zero secular energy drift.
+    - Adaptive timestep: Second-order integration with adaptive timescale control;
+      fixed-step symplectic guarantees do not directly apply to variable steps.
+
+    Supports substep acceleration reuse (return_acc=True) to halve expensive
+    pairwise force evaluations across multi-substep integration loops.
     """
     name: str = "velocity_verlet"
 
@@ -140,19 +153,25 @@ class VelocityVerletIntegrator:
         self,
         softening: float = SOFTENING,
         max_displacement: float = MAX_DISPLACEMENT_PER_STEP,
+        g_constant: float = G_AU_DAY,
     ) -> None:
         if softening < 0 or not np.isfinite(softening):
             raise ValueError(f"softening must be non-negative and finite, got {softening}")
         if max_displacement <= 0 or not np.isfinite(max_displacement):
             raise ValueError(f"max_displacement must be positive and finite, got {max_displacement}")
+        if g_constant <= 0 or not np.isfinite(g_constant):
+            raise ValueError(f"g_constant must be positive and finite, got {g_constant}")
         self.softening = float(softening)
         self.max_displacement = float(max_displacement)
+        self.g_constant = float(g_constant)
 
     def _accelerations(
         self, positions: np.ndarray, masses: np.ndarray
     ) -> np.ndarray:
-        """Return gravitational accelerations for all bodies."""
-        return compute_accelerations(positions, masses, softening=self.softening)
+        """Return gravitational accelerations for all bodies using configured G."""
+        return compute_accelerations(
+            positions, masses, softening=self.softening, g_constant=self.g_constant
+        )
 
     def reset(self) -> None:
         """Reset internal integrator state (stateless for Velocity Verlet)."""
@@ -218,7 +237,14 @@ class VelocityVerletIntegrator:
 
 
 class LeapfrogIntegrator:
-    """Second-order symplectic Leapfrog integrator (Kick-Drift-Kick formulation).
+    """Second-order Leapfrog integrator (Kick-Drift-Kick formulation).
+
+    Formulation:
+    - Fixed timestep: Symplectic integrator preserving phase-space volume.
+      For position-dependent forces, produces trajectories mathematically
+      equivalent to Velocity Verlet within machine precision.
+    - Adaptive timestep: Second-order integration with adaptive timescale control;
+      fixed-step symplectic guarantees do not directly apply to variable steps.
 
     Coordinates and velocities are evaluated synchronously at integer timesteps:
         v(t + dt/2) = v(t) + 0.5 * a(t) * dt       [Kick 1]
@@ -234,19 +260,25 @@ class LeapfrogIntegrator:
         self,
         softening: float = SOFTENING,
         max_displacement: float = MAX_DISPLACEMENT_PER_STEP,
+        g_constant: float = G_AU_DAY,
     ) -> None:
         if softening < 0 or not np.isfinite(softening):
             raise ValueError(f"softening must be non-negative and finite, got {softening}")
         if max_displacement <= 0 or not np.isfinite(max_displacement):
             raise ValueError(f"max_displacement must be positive and finite, got {max_displacement}")
+        if g_constant <= 0 or not np.isfinite(g_constant):
+            raise ValueError(f"g_constant must be positive and finite, got {g_constant}")
         self.softening = float(softening)
         self.max_displacement = float(max_displacement)
+        self.g_constant = float(g_constant)
 
     def _accelerations(
         self, positions: np.ndarray, masses: np.ndarray
     ) -> np.ndarray:
-        """Return gravitational accelerations for all bodies."""
-        return compute_accelerations(positions, masses, softening=self.softening)
+        """Return gravitational accelerations for all bodies using configured G."""
+        return compute_accelerations(
+            positions, masses, softening=self.softening, g_constant=self.g_constant
+        )
 
     def reset(self) -> None:
         """Reset internal integrator state (stateless for synchronous KDK)."""
@@ -328,6 +360,7 @@ def create_integrator(
     *,
     softening: float | None = None,
     max_displacement: float | None = None,
+    g_constant: float | None = None,
     **kwargs,
 ) -> Integrator:
     """Factory creating an integrator instance from a name or IntegratorConfig.
@@ -340,6 +373,8 @@ def create_integrator(
         Override softening length if provided.
     max_displacement : float, optional
         Override max displacement bound if provided.
+    g_constant : float, optional
+        Override gravitational constant if provided.
 
     Returns
     -------
@@ -349,12 +384,14 @@ def create_integrator(
         name = config_or_name.name
         s = softening if softening is not None else config_or_name.softening
         disp = max_displacement if max_displacement is not None else config_or_name.max_displacement
+        g = g_constant if g_constant is not None else config_or_name.g_constant
         extra_params = dict(config_or_name.parameters)
         extra_params.update(kwargs)
     elif isinstance(config_or_name, str):
         name = config_or_name.lower().strip()
         s = softening if softening is not None else SOFTENING
         disp = max_displacement if max_displacement is not None else MAX_DISPLACEMENT_PER_STEP
+        g = g_constant if g_constant is not None else G_AU_DAY
         extra_params = kwargs
     else:
         raise TypeError(f"Expected IntegratorConfig or str, got {type(config_or_name).__name__}")
@@ -365,4 +402,5 @@ def create_integrator(
         )
 
     cls = INTEGRATOR_REGISTRY[name]
-    return cls(softening=s, max_displacement=disp, **extra_params)
+    return cls(softening=s, max_displacement=disp, g_constant=g, **extra_params)
+

@@ -118,8 +118,8 @@ def test_adaptive_timestep_recalculated_between_outer_steps(monkeypatch):
     recorded_calls: list[dict] = []
     real_compute = system_module.compute_adaptive_dt
 
-    def spy_compute_adaptive_dt(positions, masses, config=None):
-        dt = real_compute(positions, masses, config)
+    def spy_compute_adaptive_dt(positions, masses, config=None, **kwargs):
+        dt = real_compute(positions, masses, config=config, **kwargs)
         recorded_calls.append({
             "positions": positions.copy(),
             "masses": masses.copy(),
