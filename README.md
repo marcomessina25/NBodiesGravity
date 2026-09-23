@@ -181,7 +181,7 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 
 ## Performance & Scalability
 
-NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
+NBodiesGravity v1.0.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
 
 - **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
 - **Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps in Velocity Verlet and Leapfrog during adaptive timestepping.
