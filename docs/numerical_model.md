@@ -1,6 +1,6 @@
 # NBodiesGravity Numerical Model & Validation Specification
 
-This document provides the formal mathematical and numerical specifications for NBodiesGravity v0.6.0+, documenting physical units, force models, integration semantics, collision mechanics, conservation diagnostics, and validation methodologies.
+This document provides the formal mathematical and numerical specifications for NBodiesGravity v1.0.0+, documenting physical units, force models, integration semantics, collision mechanics, conservation diagnostics, and validation methodologies.
 
 ---
 
@@ -177,7 +177,7 @@ The validation layer (`nbodiesgravity.engine.benchmarks`) provides six canonical
 
 ---
 
-## 8. Pluggable Integrators, Presets & Reproducibility (v0.9)
+## 8. Pluggable Integrators, Presets & Reproducibility
 
 ### 8.1 Pluggable Integrator Architecture
 The numerical stepping kernel is abstracted via the runtime-checkable `Integrator` protocol (`nbodiesgravity.engine.integrator`):

@@ -514,14 +514,14 @@ tag v0.6.0
 - [x] Checkpoints/replay
 - [x] More advanced collision/physics models
 
-### Final — v1.0
+### Completed — v1.0 (Stable Scientific Release)
 
-- [ ] Stable validated baseline
-- [ ] Documented limitations
-- [ ] Reproducible build
-- [ ] Stable persistence
-- [ ] Comprehensive regression suite
-- [ ] Public release
+- [x] Stable validated baseline
+- [x] Documented limitations
+- [x] Reproducible build & checkpoints
+- [x] Stable persistence & migration matrix
+- [x] Comprehensive regression suite
+- [x] Public release
 
 ---
 
@@ -534,3 +534,4 @@ tag v0.6.0
 | [`v07.md`](specs/v07.md) | v0.7.0 | Detailed implementation plan for scientific diagnostics, orbital analysis, and physical visualization |
 | [`v08.md`](specs/v08.md) | v0.8.0 | Detailed implementation plan for performance profiling, memory optimization, and scalability |
 | [`v09.md`](specs/v09.md) | v0.9.0 | Detailed implementation plan for advanced simulation capabilities and pre-v1.0 hardening |
+| [`v10.md`](specs/v10.md) | v1.0.0 | Stable scientific simulator release, baseline freeze, and validation specification |

@@ -471,3 +471,9 @@ def get_preset(name: str, **kwargs) -> InitialConditionSet:
         )
     factory = PRESET_REGISTRY[key]
     return factory(**kwargs)
+
+
+def register_preset(name: str, factory: Callable[..., InitialConditionSet]) -> None:
+    """Register a custom initial-condition preset factory function."""
+    PRESET_REGISTRY[name.lower().strip()] = factory
+

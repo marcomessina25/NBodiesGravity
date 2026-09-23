@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-0.9.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-1.0.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -110,7 +110,7 @@ Inline validation is active at all times: the name must be non-empty and unique 
 
 ---
 
-## Roadmap & Specifications
+## Roadmap & Documentation
 
 NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
 
@@ -119,14 +119,18 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
   - **v0.6.0**: Numerical robustness, safe timestep limits, conservation metrics, deterministic benchmarks, and fixed-step O(dt²) convergence validation.
   - **v0.7.0**: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
   - **v0.8.0**: Performance profiling, memory optimization, and scalability characterization.
-  - **v0.9.0** *(current)*: Advanced simulation capabilities, pluggable symplectic integrators (Velocity Verlet & Leapfrog), analytical initial-condition presets, deterministic checkpoints & replay, and controlled stepping.
-  - **v1.0.0**: Stable, validated scientific baseline.
+  - **v0.9.0**: Advanced simulation capabilities, pluggable symplectic integrators (Velocity Verlet & Leapfrog), analytical initial-condition presets, deterministic checkpoints & replay, and controlled stepping.
+  - **v1.0.0** *(current)*: Stable, validated scientific baseline with frozen public engine API, analytical validation matrix, hardening test suite, and comprehensive scientific documentation.
+
+### User & Technical Guides
+
+- **[Getting Started Guide](docs/getting_started.md)**: Quickstart, UI walkthrough, 3D navigation, presets, and diagnostics.
+- **[Troubleshooting Guide](docs/troubleshooting.md)**: Resolving numerical drift, OpenGL issues, Horizons network/cache handling, and performance limits.
+- **[Reproducibility Contract](docs/reproducibility.md)**: Bitwise/floating-point reproducibility standards, IEEE-754 serialization, and headless experiment replay.
+- **[Guarantees & Limitations](docs/guarantees_and_limitations.md)**: What the v1.0 engine guarantees vs. known physical and computational boundaries.
+- **[Engine API Reference](docs/api.md)**: Public API documentation covering all classes, protocols, units, and thread safety.
 - **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
-- **[v0.5.0 Specification](docs/specs/v05.md)**: Detailed plan and acceptance checklist for v0.5.0.
-- **[v0.6.0 Specification](docs/specs/v06.md)**: Detailed plan and acceptance criteria for v0.6.0.
-- **[v0.7.0 Specification](docs/specs/v07.md)**: Detailed plan and acceptance criteria for v0.7.0.
-- **[v0.8.0 Specification](docs/specs/v08.md)**: Performance profiling, benchmarks, and scalability specification.
-- **[v0.9.0 Specification](docs/specs/v09.md)**: Advanced simulation capabilities specification.
+- **[v1.0.0 Specification](docs/specs/v10.md)**: v1.0 release specification, acceptance criteria, and hardening plan.
 
 ---
 
@@ -177,7 +181,7 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 
 ## Performance & Scalability
 
-NBodiesGravity v0.8.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
+NBodiesGravity v1.0.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
 
 - **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
 - **Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps in Velocity Verlet and Leapfrog during adaptive timestepping.
@@ -222,8 +226,13 @@ Measured on Windows 11 / Python 3.12 / NumPy 2.x via `scripts/benchmark_scalabil
 
 ```
 docs/
+    api.md                       # Public Engine API reference and architectural contracts
+    getting_started.md           # User quickstart, UI walkthrough, and workflow guide
+    guarantees_and_limitations.md# Formal scientific guarantees and operational boundaries
     numerical_model.md           # Mathematical formulations, softening, and validation methodology
+    reproducibility.md           # Reproducibility contract, IEEE-754 serialization, and replay
     roadmap.md                   # Master multi-release development roadmap
+    troubleshooting.md           # Diagnostic remedies, numerical drift, and common pitfalls
     specs/
         v05.md                   # v0.5.0 implementation specification
         v06.md                   # v0.6.0 numerical robustness specification
@@ -231,6 +240,7 @@ docs/
         v07_items_left.md        # v0.7.0 pre-PR checklist and verification tracking
         v08.md                   # v0.8.0 performance and scalability specification
         v09.md                   # v0.9.0 advanced simulation capabilities specification
+        v10.md                   # v1.0.0 stable scientific simulator specification
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
@@ -273,11 +283,11 @@ scripts/
     profile_engine.py            # Detailed per-component physics profiler
     smoke_test_headless.py       # Headless matplotlib orbit plot for quick checks
 tests/
-    data/                        # Horizons client, cache, and CSV/JSON export tests
-    engine/                      # Integrator, system, orbital elements, diagnostics history, collisions, and timestep tests
+    data/                        # Horizons client, cache, reliability, and CSV/JSON export tests
+    engine/                      # Integrators, lifecycle stress, orbital elements, diagnostics, and collisions
     rendering/                   # OpenGL, camera, shaders, and trail buffer tests
     ui/                          # PyQt widget, diagnostics panel, transaction, and persistence tests
-    validation/                  # Physical conservation, benchmarks A-F, convergence, and softening tests
+    validation/                  # Physical conservation, benchmarks A-F, convergence, v1.0 matrix, and migrations
 environment.yml
 ```
 

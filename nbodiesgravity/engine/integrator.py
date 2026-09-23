@@ -355,6 +355,11 @@ INTEGRATOR_REGISTRY: dict[str, type] = {
 }
 
 
+def register_integrator(name: str, cls: type) -> None:
+    """Register a custom integrator class conforming to the Integrator protocol."""
+    INTEGRATOR_REGISTRY[name.lower().strip()] = cls
+
+
 def create_integrator(
     config_or_name: IntegratorConfig | str = "velocity_verlet",
     *,
