@@ -197,8 +197,8 @@ class ScientificDiagnosticsDialog(QDialog):
 
         layout.addWidget(box_mom)
 
-        # Integrator & Timestep Budget
-        box_int = QGroupBox("Velocity Verlet Integrator & Substep Budget")
+        # Integrator, Physics Model & Substep Budget
+        box_int = QGroupBox("Integrator, Physical Model & Substep Budget")
         grid_i = QGridLayout(box_int)
 
         grid_i.addWidget(QLabel("<b>Last Substeps:</b>"), 0, 0)
@@ -220,6 +220,18 @@ class ScientificDiagnosticsDialog(QDialog):
         grid_i.addWidget(QLabel("<b>Softening (ε):</b>"), 2, 0)
         self._lbl_softening = QLabel("–")
         grid_i.addWidget(self._lbl_softening, 2, 1)
+
+        grid_i.addWidget(QLabel("<b>Integrator:</b>"), 2, 2)
+        self._lbl_integrator_name = QLabel("Velocity Verlet [Validated]")
+        grid_i.addWidget(self._lbl_integrator_name, 2, 3)
+
+        grid_i.addWidget(QLabel("<b>Gravity Model:</b>"), 3, 0)
+        self._lbl_gravity_model = QLabel("Newtonian")
+        grid_i.addWidget(self._lbl_gravity_model, 3, 1)
+
+        grid_i.addWidget(QLabel("<b>Collision Model:</b>"), 3, 2)
+        self._lbl_collision_model = QLabel("Inelastic Merge")
+        grid_i.addWidget(self._lbl_collision_model, 3, 3)
 
         layout.addWidget(box_int)
         layout.addStretch()
@@ -447,6 +459,18 @@ class ScientificDiagnosticsDialog(QDialog):
         self._lbl_adaptive_dt.setText(f"{self._sim.system.last_adaptive_dt:.6e} days")
         self._lbl_max_substeps.setText(f"{self._sim.system.timestep_config.max_substeps:,} substeps")
         self._lbl_softening.setText(f"{self._sim.system.softening:.2e} AU")
+
+        itg_name = getattr(self._sim.system.integrator, "name", "velocity_verlet")
+        if itg_name == "velocity_verlet":
+            display_itg = "<span style='color:#2ecc71; font-weight:bold;'>Velocity Verlet [Validated Baseline]</span>"
+        else:
+            display_itg = f"<span style='color:#f39c12; font-weight:bold;'>{itg_name.title()} [Alternative]</span>"
+        self._lbl_integrator_name.setText(display_itg)
+
+        grav_model = self._sim.system.physics_config.gravity_model.title()
+        self._lbl_gravity_model.setText(f"{grav_model} (Plummer Softening)")
+        coll_model = self._sim.system.collision_config.model.title()
+        self._lbl_collision_model.setText(f"{coll_model} (COM-Conserving)")
 
     def _update_orbital_view(self) -> None:
         target_name = self._combo_target_body.currentText()

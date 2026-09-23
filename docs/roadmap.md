@@ -100,7 +100,7 @@ The detailed implementation documents and architectural contracts currently defi
 - [`specs/v06.md`](specs/v06.md) — v0.6.0 numerical robustness & validation
 - [`specs/v07.md`](specs/v07.md) — v0.7.0 scientific diagnostics & orbital analysis
 - [`specs/v08.md`](specs/v08.md) — v0.8.0 performance, scalability & runtime efficiency
-- [`specs/v09.md`](specs/v09.md) — v0.9.0 advanced simulation capabilities & pre-v1.0 hardening
+- [`specs/v09.md`](specs/v09.md) — v0.9.0 full implementation plan & architectural contract (advanced simulation capabilities)
 
 ---
 
@@ -281,7 +281,7 @@ The guiding rule is:
 
 ### Detailed plan
 
-See [`specs/v09.md`](specs/v09.md).
+The full, detailed implementation plan and architectural contract is established in [`specs/v09.md`](specs/v09.md).
 
 ### Main workstreams
 
@@ -301,6 +301,19 @@ See [`specs/v09.md`](specs/v09.md).
 ### Definition of Done
 
 v0.9 is ready when alternative integrators, presets, and replay controls are fully functional, thoroughly tested against analytical benchmarks, and the default physical baseline remains completely unaffected when experimental features are inactive.
+
+### Status & Outcome (Completed)
+
+v0.9.0 is fully implemented and validated:
+- Pluggable integrator architecture implemented (`Integrator` protocol, `IntegratorConfig`, and registry).
+- Validated Velocity Verlet preserved as default baseline with acceleration reuse intact.
+- Alternative second-order symplectic Kick-Drift-Kick Leapfrog integrator implemented and verified.
+- Six analytical initial-condition presets (`circular_two_body`, `eccentric_two_body`, `oriented_two_body`, `earth_moon`, `binary_star`, `restricted_three_body` with L4/L5) implemented with registry and UI loader.
+- Schema version 2 deterministic simulation checkpoints and headless replay harness implemented.
+- Controlled stepping (`step_once`), duration advancement (`advance`), and simulation time limits implemented.
+- Explicit `PhysicsConfig` and `CollisionConfig` added and serialized.
+- UI enhanced with Presets menu, Integrator selector, Step button, and Diagnostics active model readouts.
+- 100% test suite pass rate (210/210 tests passing). Zero performance regression against v0.8.0.
 
 ---
 
@@ -479,27 +492,27 @@ tag v0.6.0
 - [x] Numerical documentation
 - [x] Validation workflow
 
-### Future — v0.7
+### Completed — v0.7
 
-- [ ] Scientific diagnostics UI
-- [ ] Orbital elements
-- [ ] Physical plots
-- [ ] Data export
+- [x] Scientific diagnostics UI
+- [x] Orbital elements
+- [x] Physical plots
+- [x] Data export
 
-### Future — v0.8
+### Completed — v0.8
 
-- [ ] Profiling
-- [ ] Physics optimization
-- [ ] Rendering optimization
-- [ ] Data-loading optimization
-- [ ] Scalability benchmarks
+- [x] Profiling
+- [x] Physics optimization
+- [x] Rendering optimization
+- [x] Data-loading optimization
+- [x] Scalability benchmarks
 
-### Future — v0.9
+### Completed — v0.9
 
-- [ ] Additional integrators
-- [ ] Initial-condition presets
-- [ ] Checkpoints/replay
-- [ ] More advanced collision/physics models
+- [x] Additional integrators
+- [x] Initial-condition presets
+- [x] Checkpoints/replay
+- [x] More advanced collision/physics models
 
 ### Final — v1.0
 
@@ -519,5 +532,5 @@ tag v0.6.0
 | [`v05.md`](specs/v05.md) | v0.5.0 | Detailed implementation plan for finishing `feature_v5` and preparing the PR to `main` |
 | [`v06.md`](specs/v06.md) | v0.6.0 | Detailed implementation plan for numerical robustness and validation |
 | [`v07.md`](specs/v07.md) | v0.7.0 | Detailed implementation plan for scientific diagnostics, orbital analysis, and physical visualization |
-| `v08.md` | v0.8.0 | To be created when v0.7.0 is complete |
-| `v09.md` | v0.9.0 | To be created when v0.8.0 is complete |
+| [`v08.md`](specs/v08.md) | v0.8.0 | Detailed implementation plan for performance profiling, memory optimization, and scalability |
+| [`v09.md`](specs/v09.md) | v0.9.0 | Detailed implementation plan for advanced simulation capabilities and pre-v1.0 hardening |

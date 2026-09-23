@@ -60,10 +60,10 @@ The integrator advances kinematics through the standard second-order Velocity Ve
 3. **Velocity update**:
    $$\mathbf{v}_{n+1} = \mathbf{v}_n + \frac{1}{2} (\mathbf{a}_n + \mathbf{a}_{n+1}) \Delta t$$
 
-### 3.2 Symplectic Semantics
-For fixed timestep $\Delta t$, Velocity Verlet is a **symplectic integrator**: it preserves phase space volume and conserves a shadow Hamiltonian $\tilde{H} = H + O(\Delta t^2)$, ensuring that energy errors oscillate with zero secular growth over multi-decade integration spans.
+### 3.2 Symplectic Semantics & Fixed vs. Adaptive Timesteps
+For fixed timestep $\Delta t$, Velocity Verlet and Leapfrog (KDK) are **symplectic integrators**: they preserve phase space volume and conserve a shadow Hamiltonian $\tilde{H} = H + O(\Delta t^2)$, ensuring that energy errors oscillate with zero secular growth over multi-decade integration spans.
 
-When the timestep $\Delta t$ is selected adaptively as a function of instantaneous coordinates, strict symplecticity is no longer formally preserved. However, by selecting $\Delta t$ safely and smoothly based on the shortest estimated orbital timescale, energy drift remains bounded to machine precision for regular planetary orbits.
+When the timestep $\Delta t$ is selected adaptively as a function of instantaneous coordinates, strict symplecticity is no longer formally preserved. The scheme operates as a second-order integration method with adaptive timestep error control; fixed-step symplectic guarantees do not directly apply. However, by selecting $\Delta t$ safely and smoothly based on the shortest estimated orbital timescale, energy drift remains bounded to machine precision for regular planetary orbits.
 
 ### 3.3 Explicit Timestep Configuration (`TimeStepConfig`)
 Adaptive timestepping is governed by `TimeStepConfig`:
@@ -75,11 +75,36 @@ safety_factor : 0.01 (targets ~100 steps per orbital period)
 max_substeps  : 10,000 substeps per step() call
 ```
 
-The adaptive substep is computed from the minimum pairwise orbital timescale proxy:
+The adaptive substep is computed from the minimum pairwise orbital timescale proxy, evaluating with the configured gravitational constant $G$:
 $$T_{ij} \approx 2\pi \sqrt{\frac{d_{ij}^3}{G(m_i + m_j)}}$$
 $$\Delta t = \max\left(\text{min\_dt}, \min\left(\text{max\_dt}, \text{safety\_factor} \times \min_{i<j} T_{ij}\right)\right)$$
 
 If a pathological configuration requires more substeps than `max_substeps`, the integrator halts and raises `ComputationalBudgetExceededError`, preserving the simulation state rather than hanging the application.
+
+### 3.4 Leapfrog Integrator (Kick-Drift-Kick Formulation)
+In v0.9, an alternative second-order symplectic integrator is available: the Kick-Drift-Kick (KDK) Leapfrog integrator (`LeapfrogIntegrator`):
+
+1. **Half-Step Velocity Kick**:
+   $$\mathbf{v}_{n+1/2} = \mathbf{v}_n + \frac{1}{2} \mathbf{a}_n \Delta t$$
+2. **Full-Step Position Drift**:
+   $$\mathbf{r}_{n+1} = \mathbf{r}_n + \mathbf{v}_{n+1/2} \Delta t$$
+3. **Acceleration Evaluation**:
+   $$\mathbf{a}_{n+1} = \mathbf{a}(\mathbf{r}_{n+1})$$
+4. **Half-Step Velocity Kick**:
+   $$\mathbf{v}_{n+1} = \mathbf{v}_{n+1/2} + \frac{1}{2} \mathbf{a}_{n+1} \Delta t$$
+
+#### Mathematical Equivalence to Velocity Verlet
+For conservative, velocity-independent gravitational force fields $\mathbf{a} = \mathbf{a}(\mathbf{r})$, substituting the half-step velocity kick (1) into the drift step (2) yields:
+$$\mathbf{r}_{n+1} = \mathbf{r}_n + \left(\mathbf{v}_n + \frac{1}{2} \mathbf{a}_n \Delta t\right) \Delta t = \mathbf{r}_n + \mathbf{v}_n \Delta t + \frac{1}{2} \mathbf{a}_n \Delta t^2$$
+and substituting (1) into the final kick (4) yields:
+$$\mathbf{v}_{n+1} = \mathbf{v}_n + \frac{1}{2} (\mathbf{a}_n + \mathbf{a}_{n+1}) \Delta t$$
+Thus, synchronous KDK Leapfrog produces trajectories that are mathematically equivalent to Velocity Verlet within machine precision ($< 10^{-14}$ floating-point divergence), sharing its second-order $O(\Delta t^2)$ convergence and symplecticity under fixed timestepping while offering an explicit half-step velocity representation.
+
+### 3.5 Substep Acceleration Reuse
+Both `VelocityVerletIntegrator` and `LeapfrogIntegrator` support acceleration reuse across consecutive substeps:
+- The integrator accepts an optional precomputed acceleration $\mathbf{a}_0$ matching positions $\mathbf{r}_n$. If provided, evaluation of initial acceleration is bypassed.
+- When `return_acc=True`, the integrator returns the newly computed acceleration $\mathbf{a}_{n+1}$ alongside updated positions and velocities.
+- `SolarSystem.step()` caches this $\mathbf{a}_{n+1}$ and feeds it as $\mathbf{a}_0$ into the subsequent substep within each outer step, halving expensive pairwise force evaluations during multi-substep integration. Cached accelerations are automatically invalidated whenever bodies are added, edited, removed, or merged.
 
 ---
 
@@ -149,3 +174,35 @@ The validation layer (`nbodiesgravity.engine.benchmarks`) provides six canonical
   $$\frac{e(\Delta t / 2)}{e(\Delta t)} \approx 0.25, \quad p = \log_2 \left(\frac{e(\Delta t)}{e(\Delta t / 2)}\right) \approx 2.0 \pm 0.25$$
   This validates the second-order convergence of the underlying discrete integration operator on both circular and eccentric Keplerian orbits.
 - **Adaptive Timestepping Semantics**: In the live interactive simulation, timesteps are chosen adaptively based on instantaneous orbital timescale proxies ($T_{ij} \approx 2\pi \sqrt{d_{ij}^3 / G(m_i + m_j)}$) within the bounds $[\text{min\_dt}, \text{max\_dt}]$ and subject to a maximum substep budget (`max_substeps = 10,000`). While adaptive step variation bounds truncation errors during close approaches and maintains numerical stability, the formal asymptotic $O(\Delta t^2)$ convergence rate applies specifically to the fixed-step integrator; the full adaptive engine is governed by timescale-bounded error control.
+
+---
+
+## 8. Pluggable Integrators, Presets & Reproducibility (v0.9)
+
+### 8.1 Pluggable Integrator Architecture
+The numerical stepping kernel is abstracted via the runtime-checkable `Integrator` protocol (`nbodiesgravity.engine.integrator`):
+- `name: str`: Human-readable identifier (`velocity_verlet`, `leapfrog`).
+- `softening: float`: Gravitational softening parameter $\varepsilon$ in AU.
+- `max_displacement: float`: Maximum allowable single-step displacement threshold in AU.
+- `g_constant: float`: Configured gravitational constant $G$, passed explicitly to force evaluations.
+- `step(positions, velocities, masses, dt, a0=None, return_acc=False)`: Advances positions and velocities for a single step $\Delta t$, optionally accepting precomputed accelerations $\mathbf{a}_0$ and returning updated accelerations $\mathbf{a}_{n+1}$ for acceleration reuse across substeps.
+- `reset()`: Flushes internal state or cached accelerations when the system configuration or body list changes discontinuously.
+
+The factory function `create_integrator(config)` instantiates integrators dynamically from an extensible registry (`INTEGRATOR_REGISTRY`).
+
+### 8.2 Analytical Initial-Condition Presets
+NBodiesGravity v0.9 introduces six deterministic analytical initial-condition presets (`nbodiesgravity.engine.presets`) that strictly honor the configured `PhysicsConfig.gravitational_constant`:
+1. **`circular_two_body`**: Keplerian two-body system in circular orbit with exact theoretical velocity $v_0 = \sqrt{G(m_1 + m_2)/r}$.
+2. **`eccentric_two_body`**: Two-body system with configurable eccentricity $e = 0.5$, periapsis distance $r_p = a(1-e)$, and vis-viva periapsis velocity $v_p = \sqrt{G(m_1 + m_2)(2/r_p - 1/a)}$.
+3. **`oriented_two_body`**: Two-body system rotated arbitrarily in 3D space by inclination $i$, longitude of ascending node $\Omega$, and argument of periapsis $\omega$ via standard Euler rotation matrices.
+4. **`earth_moon`**: Geocentric Earth-Moon system initialized in dynamical equilibrium.
+5. **`binary_star`**: Equal-mass binary star system orbiting their mutual barycenter.
+6. **`restricted_three_body`**: Circular restricted-three-body-like system with primaries and a numerically negligible test particle placed at analytical triangular Lagrange points $L_4$ and $L_5$ for the idealized circular model.
+
+### 8.3 Checkpoint Serialization & Replay Harness
+Simulation state can be captured into high-precision, reproducible checkpoints (`nbodiesgravity.engine.checkpoints`) with IEEE-754 double-precision state serialization:
+- **Schema Version**: `schema_version = 2`, `checkpoint_version = 1`.
+- **Physical Precision**: Exact IEEE 754 floating-point coordinates, velocities, masses, and radii.
+- **System Configuration**: Full serialization of `IntegratorConfig`, `PhysicsConfig` (including configured $G$), `CollisionConfig`, `TimeStepConfig`, and elapsed simulated days.
+- **Experiment Replay**: Headless deterministic experiment execution (`nbodiesgravity.engine.experiments.run_replay` and `run_experiment`) reproducing trajectories identically without UI overhead.
+

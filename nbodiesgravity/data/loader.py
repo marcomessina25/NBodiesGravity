@@ -1,4 +1,4 @@
-"""Assembles a SolarSystem from the bundled J2000 snapshot or JPL Horizons.
+"""Assembles a SolarSystem from bundled snapshots, JPL Horizons, presets, or checkpoints.
 
 Public API
 ----------
@@ -8,16 +8,24 @@ load_default_system() -> SolarSystem
 load_system_at_date(epoch, progress_cb) -> SolarSystem
     Checks local cache; falls back to JPL Horizons.
     Designed to run inside a QThread worker (DateLoaderWorker).
+
+load_preset_system(preset_name, **kwargs) -> tuple[SolarSystem, datetime]
+    Loads one of the analytical initial-condition presets.
+
+load_checkpoint(path) -> tuple[SolarSystem, datetime, float, dict]
+    Restores simulation state from a high-precision checkpoint file.
 """
 from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 import numpy as np
 
 from nbodiesgravity.engine.body import CelestialBody
 from nbodiesgravity.engine.system import SolarSystem
+from nbodiesgravity.engine.presets import get_preset
+from nbodiesgravity.engine.checkpoints import SimulationCheckpoint
 import nbodiesgravity.data.cache as _cache
 # Indirected name so tests can monkeypatch _fetch_from_horizons
 from nbodiesgravity.data.horizons import fetch as _fetch_from_horizons  # noqa: F401
@@ -53,6 +61,18 @@ def load_default_system() -> SolarSystem:
         for e in snapshot["bodies"]
     ]
     return SolarSystem(bodies)
+
+
+def load_preset_system(preset_name: str, **kwargs) -> tuple[SolarSystem, datetime]:
+    """Load an analytical initial-condition preset and return (system, epoch)."""
+    preset = get_preset(preset_name, **kwargs)
+    return preset.create_system(), preset.epoch
+
+
+def load_checkpoint(path: str | Path) -> tuple[SolarSystem, datetime, float, dict[str, Any]]:
+    """Load a SimulationCheckpoint from JSON file and restore simulation state."""
+    chk = SimulationCheckpoint.load(path)
+    return chk.restore()
 
 
 def load_system_at_date(

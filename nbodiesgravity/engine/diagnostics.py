@@ -47,6 +47,9 @@ class DiagnosticReport:
     linear_momentum_drift: MetricDrift
     angular_momentum_drift: MetricDrift
     center_of_mass_drift: MetricDrift
+    integrator_name: str = "velocity_verlet"
+    gravity_model: str = "newtonian"
+    collision_model: str = "merge"
 
     @property
     def normalized_momentum_drift(self) -> float:
@@ -87,7 +90,10 @@ def compute_kinetic_energy(masses: np.ndarray, velocities: np.ndarray) -> float:
 
 
 def compute_potential_energy(
-    positions: np.ndarray, masses: np.ndarray, softening: float = SOFTENING
+    positions: np.ndarray,
+    masses: np.ndarray,
+    softening: float = SOFTENING,
+    g_constant: float = G_AU_DAY,
 ) -> float:
     """Return softened gravitational potential energy U = - Σ_{i<j} G m_i m_j / sqrt(r_ij² + ε²)."""
     n = len(masses)
@@ -99,7 +105,7 @@ def compute_potential_energy(
     dist = np.sqrt(dist_sq)
 
     # Pairwise mass products G * m_i * m_j
-    m_prod = G_AU_DAY * (masses[:, np.newaxis] * masses[np.newaxis, :])
+    m_prod = g_constant * (masses[:, np.newaxis] * masses[np.newaxis, :])
     factor = m_prod / dist
     np.fill_diagonal(factor, 0.0)
     # Sum over distinct pairs i < j (half of symmetric matrix sum)
@@ -111,10 +117,11 @@ def compute_total_energy(
     velocities: np.ndarray,
     masses: np.ndarray,
     softening: float = SOFTENING,
+    g_constant: float = G_AU_DAY,
 ) -> float:
     """Return total mechanical energy E = K + U."""
     return compute_kinetic_energy(masses, velocities) + compute_potential_energy(
-        positions, masses, softening=softening
+        positions, masses, softening=softening, g_constant=g_constant
     )
 
 
@@ -150,12 +157,13 @@ def compute_snapshot(
         tuple[np.ndarray, np.ndarray, np.ndarray],
     ],
     softening: float = SOFTENING,
+    g_constant: float = G_AU_DAY,
 ) -> ConservationSnapshot:
     """Compute complete conservation snapshot from bodies or arrays."""
     pos, vel, mass = _extract_arrays(source)
     total_mass = float(np.sum(mass))
     ke = compute_kinetic_energy(mass, vel)
-    pe = compute_potential_energy(pos, mass, softening=softening)
+    pe = compute_potential_energy(pos, mass, softening=softening, g_constant=g_constant)
     p = compute_linear_momentum(mass, vel)
     l = compute_angular_momentum(pos, vel, mass)
     cm = compute_center_of_mass(pos, mass)
@@ -212,9 +220,13 @@ class ConservationTracker:
             tuple[np.ndarray, np.ndarray, np.ndarray],
         ],
         softening: float = SOFTENING,
+        g_constant: float = G_AU_DAY,
     ) -> None:
         self.softening = softening
-        self.initial_snapshot = compute_snapshot(initial_source, softening=softening)
+        self.g_constant = g_constant
+        self.initial_snapshot = compute_snapshot(
+            initial_source, softening=softening, g_constant=g_constant
+        )
 
     def evaluate(
         self,
@@ -223,9 +235,15 @@ class ConservationTracker:
             Sequence[BodyState],
             tuple[np.ndarray, np.ndarray, np.ndarray],
         ],
+        *,
+        integrator_name: str = "velocity_verlet",
+        gravity_model: str = "newtonian",
+        collision_model: str = "merge",
     ) -> DiagnosticReport:
         """Evaluate current state and return a DiagnosticReport with drift metrics."""
-        current_snap = compute_snapshot(current_source, softening=self.softening)
+        current_snap = compute_snapshot(
+            current_source, softening=self.softening, g_constant=self.g_constant
+        )
         e_drift = compute_drift(self.initial_snapshot.total_energy, current_snap.total_energy)
         p_drift = compute_drift(self.initial_snapshot.linear_momentum, current_snap.linear_momentum)
         l_drift = compute_drift(self.initial_snapshot.angular_momentum, current_snap.angular_momentum)
@@ -238,6 +256,9 @@ class ConservationTracker:
             linear_momentum_drift=p_drift,
             angular_momentum_drift=l_drift,
             center_of_mass_drift=cm_drift,
+            integrator_name=integrator_name,
+            gravity_model=gravity_model,
+            collision_model=collision_model,
         )
 
 

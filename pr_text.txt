@@ -1,0 +1,77 @@
+# PR: NBodiesGravity v0.9.0 — Advanced Simulation Capabilities, Pluggable Integrators, Presets, Checkpoints & Pre-v1.0 Hardening
+
+## Overview
+
+This pull request delivers the **v0.9.0** release of NBodiesGravity, completing all objectives and acceptance criteria defined in [`docs/specs/v09.md`](docs/specs/v09.md), [`docs/specs/v09_items_left.md`](docs/specs/v09_items_left.md), and [`docs/roadmap.md`](docs/roadmap.md).
+
+Version 0.9 turns the validated v0.8 numerical engine into a flexible scientific simulation framework while strictly preserving the validated Velocity Verlet Newtonian solver as the default reference baseline:
+> *"Keep the validated Newtonian + Velocity Verlet engine as the trusted baseline, while introducing explicit extension points for alternative integrators, initial-condition presets, reproducible experiments, and controlled physical-model variations."*
+
+---
+
+## Key Workstreams & Implemented Features
+
+### 1. Pluggable Integrator Architecture (`nbodiesgravity/engine/integrator.py`)
+- **`Integrator` Protocol & `IntegratorConfig`**: Formal interface for numerical steppers (`name`, `softening`, `max_displacement`, `g_constant`, `step(positions, velocities, masses, dt, a0=None, return_acc=False)`, `reset()`).
+- **Integrator Registry & Factory**: `create_integrator()` instantiates registered integrators dynamically.
+- **Velocity Verlet Baseline**: Refactored to implement the `Integrator` protocol with substep acceleration reuse and softening preserved.
+- **Alternative Integrator — Kick-Drift-Kick Leapfrog (`LeapfrogIntegrator`)**: Implemented second-order Leapfrog (symplectic under fixed timestepping; adaptive second-order error control under variable timestepping). Trajectories match Velocity Verlet within floating-point precision ($< 10^{-14}$) for position-dependent forces with identical second-order convergence and acceleration reuse.
+
+### 2. Analytical Initial-Condition Presets (`nbodiesgravity/engine/presets.py`)
+- **`InitialConditionSet` & Preset Registry**: Provides 6 deterministic analytical initial-condition presets that strictly honor configured physics (`PhysicsConfig.gravitational_constant`):
+  - `circular_two_body`: Two equal masses in circular Keplerian orbit with exact orbital velocity $v_0 = \sqrt{G(m_1 + m_2)/r}$.
+  - `eccentric_two_body`: Keplerian orbit with eccentricity $e=0.5$ and vis-viva periapsis velocity.
+  - `oriented_two_body`: Two-body system rotated in 3D ($i=45^\circ, \Omega=30^\circ, \omega=60^\circ$).
+  - `earth_moon`: Geocentric Earth-Moon system initialized in dynamical equilibrium.
+  - `binary_star`: Equal-mass binary star system orbiting their mutual barycenter.
+  - `restricted_three_body`: Circular restricted-three-body-like system with primaries and a numerically negligible test particle placed at analytical triangular Lagrange points $L_4$ and $L_5$ for the idealized circular model.
+- **Preset UI**: Added *File → Load Preset…* dialog with system descriptions and instant loading.
+
+### 3. Checkpoints, Reproducibility & Replay Harness (`nbodiesgravity/engine/checkpoints.py`, `nbodiesgravity/engine/experiments.py`)
+- **Versioned Checkpoints**: `SimulationCheckpoint` (`schema_version=2`, `checkpoint_version=1`) with deterministic IEEE-754 double-precision restoration of coordinates, velocities, masses, radii, labels, and all physical configurations.
+- **UI Integration**: Added *File → Save Checkpoint…* and *File → Load Checkpoint…*.
+- **Deterministic Replay Harness**: `run_replay()` and `run_experiment()` execute headless experiments over exact simulation times with trajectory capturing and conservation tracking.
+
+### 4. Explicit Physical & Collision Models (`nbodiesgravity/engine/physics.py`)
+- **`PhysicsConfig`**: Configurable gravitational constant $G$, softening length $\varepsilon$, gravity model (`newtonian`), and softening model (`plummer`). Fully operative throughout the entire computation pipeline.
+- **`CollisionConfig`**: Configurable collision handling (`enabled`, model `merge`).
+- **Collision Event Tracking**: Logs collision events (`absorbed_body`, `survivor_body`, epoch) accessible through system properties.
+
+### 5. Controlled Stepping & UI Transparency
+- **Step-by-Step Physics Controls**:
+  - `step_once()` advances physics by a single discrete timestep and pauses.
+  - Added "Step" button to `ControlPanel` and *Simulation → Step Once* action (shortcut `Space` / `F10` when paused).
+  - Duration-bounded integration (`advance(duration)`) and maximum simulation time limit (`max_simulation_time` with clean clamping and `target_time_reached` Qt signal emission).
+- **Integrator Switching & Model Transparency**:
+  - *Simulation → Integrator* submenu with radio actions for `Velocity Verlet [Validated Baseline]` and `Leapfrog`.
+  - Window title banner alerts user when non-default configurations are active (`[EXPERIMENTAL CONFIGURATION: Leapfrog]`).
+  - `ScientificDiagnosticsDialog` live readouts for active integrator, gravity model, collision model, and collision events.
+
+### 6. Corrective Pass Highlights (Per `docs/specs/v09_items_left.md`)
+- **Configured G Operative Everywhere**: `PhysicsConfig.gravitational_constant` is strictly propagated to `compute_accelerations()`, `compute_adaptive_dt()`, `ConservationTracker`, `SolarSystem`, preset orbital velocity derivations, checkpoints, and replay workflows.
+- **Qualified Mathematical Terminology**: Symplectic guarantees are explicitly documented as applying to fixed timesteps, while adaptive stepping is documented as second-order with adaptive error control. Lagrange $L_4/L_5$ and restricted three-body presets are properly characterized.
+- **Reproducibility Terminology Refinement**: Replaced "bitwise-reproducible" with "deterministic floating-point checkpoint/resume with IEEE-754 double-precision state serialization".
+- **Documentation & README Cleanup**: Consolidated features, removed duplicate feature entries and stale notes, and updated `docs/numerical_model.md` to reflect actual `Integrator` API signatures and acceleration reuse mechanics.
+
+---
+
+## Verification & Test Results
+
+### Automated Test Suite
+```powershell
+conda run -n nbodiesgravity pytest -v
+```
+```text
+============================= 218 passed in 7.73s =============================
+```
+- Includes 48 new tests across `test_cross_integrator.py`, `test_controlled_stepping.py`, `test_custom_g.py`, `test_v09_ui.py`, and `test_v09_backward_compatibility.py`.
+- 100% pass rate with zero warnings.
+
+### Physical Benchmarks & Conservation Verification
+```powershell
+conda run -n nbodiesgravity python scripts/benchmark_engine.py --all
+```
+- **Earth-Sun (1 yr)**: Relative energy drift $+1.03 \times 10^{-13}$, momentum drift $8.41 \times 10^{-16}$.
+- **Earth-Moon (5 months)**: Relative energy drift $+1.49 \times 10^{-9}$, momentum drift $2.19 \times 10^{-16}$.
+- **Full Solar System (39 bodies, 1 yr)**: Relative energy drift $-1.53 \times 10^{-10}$, momentum drift $4.37 \times 10^{-15}$.
+- Zero performance regression against the v0.8 baseline across all synthetic N-body scalability benchmarks ($N=2$ to $N=500$).
