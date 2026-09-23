@@ -24,7 +24,7 @@ class ExperimentMetadata:
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
-    application_version: str = "0.9.0"
+    application_version: str = "1.0.0"
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,7 +46,7 @@ class ExperimentMetadata:
             description=str(data.get("description", "")),
             author=str(data.get("author", "NBodiesGravity")),
             created_at=str(data.get("created_at", "")),
-            application_version=str(data.get("application_version", "0.9.0")),
+            application_version=str(data.get("application_version", "1.0.0")),
             notes=str(data.get("notes", "")),
         )
 

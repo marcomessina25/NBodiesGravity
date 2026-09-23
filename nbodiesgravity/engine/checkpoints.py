@@ -25,7 +25,7 @@ class SimulationCheckpoint:
     """
     schema_version: int = 2
     checkpoint_version: int = 1
-    application_version: str = "0.9.0"
+    application_version: str = "1.0.0"
     timestamp_iso: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -89,10 +89,10 @@ class SimulationCheckpoint:
         bodies = [
             CelestialBody(
                 name=e["name"],
-                mass=float(e["mass_kg"]),
-                pos=np.array(e["pos_au"], dtype=float),
-                vel=np.array(e["vel_au_per_day"], dtype=float),
-                radius=float(e.get("radius_km", 1000.0)),
+                mass=float(e.get("mass_kg", e.get("mass", 1.0))),
+                pos=np.array(e.get("pos_au", e.get("pos", [0.0, 0.0, 0.0])), dtype=float),
+                vel=np.array(e.get("vel_au_per_day", e.get("vel", [0.0, 0.0, 0.0])), dtype=float),
+                radius=float(e.get("radius_km", e.get("radius", 1000.0))),
                 color=tuple(e.get("color", [255, 255, 255])),
                 label=e.get("label", "planet"),
                 active=bool(e.get("active", True)),
@@ -134,20 +134,34 @@ class SimulationCheckpoint:
         # Handle format version 1 backward compatibility
         if schema_v < 2 and "bodies" in data:
             epoch_str = str(data.get("epoch", "2000-01-01"))
+            normalized_bodies = []
+            for b in data["bodies"]:
+                normalized_bodies.append({
+                    "name": b["name"],
+                    "mass_kg": float(b.get("mass_kg", b.get("mass", 1.0))),
+                    "pos_au": list(b.get("pos_au", b.get("pos", [0.0, 0.0, 0.0]))),
+                    "vel_au_per_day": list(b.get("vel_au_per_day", b.get("vel", [0.0, 0.0, 0.0]))),
+                    "radius_km": float(b.get("radius_km", b.get("radius", 1000.0))),
+                    "color": list(b.get("color", [255, 255, 255])),
+                    "label": b.get("label", "planet"),
+                    "active": bool(b.get("active", True)),
+                    "show_trail": bool(b.get("show_trail", True)),
+                    "show_name": bool(b.get("show_name", True)),
+                })
             return cls(
                 schema_version=2,
                 checkpoint_version=1,
-                application_version=data.get("application_version", "0.8.0"),
+                application_version=data.get("application_version", "1.0.0"),
                 epoch=epoch_str,
                 elapsed_days=float(data.get("elapsed_days", 0.0)),
-                bodies=data["bodies"],
+                bodies=normalized_bodies,
                 metadata=data.get("metadata", {}),
             )
 
         return cls(
             schema_version=int(data.get("schema_version", 2)),
             checkpoint_version=int(data.get("checkpoint_version", 1)),
-            application_version=str(data.get("application_version", "0.9.0")),
+            application_version=str(data.get("application_version", "1.0.0")),
             timestamp_iso=str(data.get("timestamp_iso", "")),
             epoch=str(data.get("epoch", "2000-01-01")),
             elapsed_days=float(data.get("elapsed_days", 0.0)),

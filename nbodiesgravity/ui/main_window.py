@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
                 self._sim.system,
                 self._last_epoch,
                 self._sim.elapsed_days,
-                metadata={"application_version": "0.9.0"},
+                metadata={"application_version": "1.0.0"},
             )
             chk.save(path)
             self.statusBar().showMessage(f"Saved checkpoint to {Path(path).name}")
@@ -677,6 +677,7 @@ class MainWindow(QMainWindow):
             current_date = self._last_epoch + timedelta(days=self._sim.elapsed_days)
             data = {
                 "format_version": 1,
+                "application_version": "1.0.0",
                 "epoch": current_date.strftime("%Y-%m-%d"),
                 "timestep_config": self._sim.system.timestep_config.to_dict(),
                 "integrator_config": self._sim.system.integrator_config.to_dict(),
