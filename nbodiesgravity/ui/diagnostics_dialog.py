@@ -6,7 +6,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QGroupBox, QGridLayout, QComboBox, QPushButton,
-    QFileDialog, QMessageBox, QFrame,
+    QFileDialog, QMessageBox, QFrame, QScrollArea,
 )
 from PyQt6.QtCore import Qt, QTimer
 
@@ -94,10 +94,14 @@ class ScientificDiagnosticsDialog(QDialog):
         self._tabs = QTabWidget()
         layout.addWidget(self._tabs)
 
-        # Tab 1: Conservation Overview
+        # Tab 1: Conservation Overview & System Stability
+        scroll_c = QScrollArea()
+        scroll_c.setWidgetResizable(True)
+        scroll_c.setFrameShape(QScrollArea.Shape.NoFrame)
         self._tab_conservation = QWidget()
         self._build_conservation_tab(self._tab_conservation)
-        self._tabs.addTab(self._tab_conservation, "⚡ Conservation & Integrator")
+        scroll_c.setWidget(self._tab_conservation)
+        self._tabs.addTab(scroll_c, "⚡ Conservation & Integrator")
 
         # Tab 2: Orbital Elements Inspector
         self._tab_orbital = QWidget()
@@ -234,6 +238,33 @@ class ScientificDiagnosticsDialog(QDialog):
         grid_i.addWidget(self._lbl_collision_model, 3, 3)
 
         layout.addWidget(box_int)
+
+        # Dynamical Stability & System Integrity Box
+        box_stab = QGroupBox("Dynamical Stability & System Integrity")
+        grid_s = QGridLayout(box_stab)
+
+        grid_s.addWidget(QLabel("<b>Stability Status:</b>"), 0, 0)
+        self._lbl_stability_status = QLabel("–")
+        grid_s.addWidget(self._lbl_stability_status, 0, 1)
+
+        grid_s.addWidget(QLabel("<b>Primary / Dominant Mass:</b>"), 0, 2)
+        self._lbl_stability_primary = QLabel("–")
+        grid_s.addWidget(self._lbl_stability_primary, 0, 3)
+
+        grid_s.addWidget(QLabel("<b>Min Mutual Hill Separation (Δ):</b>"), 1, 0)
+        self._lbl_min_hill_delta = QLabel("–")
+        grid_s.addWidget(self._lbl_min_hill_delta, 1, 1)
+
+        grid_s.addWidget(QLabel("<b>Ejected Bodies:</b>"), 1, 2)
+        self._lbl_ejected_count = QLabel("0 bodies")
+        grid_s.addWidget(self._lbl_ejected_count, 1, 3)
+
+        grid_s.addWidget(QLabel("<b>Stability Analysis:</b>"), 2, 0)
+        self._lbl_stability_findings = QLabel("–")
+        self._lbl_stability_findings.setWordWrap(True)
+        grid_s.addWidget(self._lbl_stability_findings, 2, 1, 1, 3)
+
+        layout.addWidget(box_stab)
         layout.addStretch()
 
     # -------------------------------------------------------------------------
@@ -471,6 +502,41 @@ class ScientificDiagnosticsDialog(QDialog):
         self._lbl_gravity_model.setText(f"{grav_model} (Plummer Softening)")
         coll_model = self._sim.system.collision_config.model.title()
         self._lbl_collision_model.setText(f"{coll_model} (COM-Conserving)")
+
+        # Dynamical stability live view
+        stab = getattr(report, "stability", None)
+        if stab is not None:
+            if stab.status == "stable":
+                badge_stab = "<span style='color:#2ecc71; font-weight:bold;'>STABLE</span>"
+            elif stab.status == "marginal":
+                badge_stab = "<span style='color:#f39c12; font-weight:bold;'>MARGINAL</span>"
+            else:
+                badge_stab = "<span style='color:#e74c3c; font-weight:bold;'>UNSTABLE</span>"
+            self._lbl_stability_status.setText(f"{badge_stab} &nbsp; <i>{stab.headline}</i>")
+            self._lbl_stability_primary.setText(f"{stab.primary or 'Barycenter'}")
+
+            if stab.min_hill_delta is not None and np.isfinite(stab.min_hill_delta):
+                hill_text = f"Δ = {stab.min_hill_delta:.2f} (Gladman limit: 3.46)"
+            else:
+                hill_text = "N/A"
+            self._lbl_min_hill_delta.setText(hill_text)
+
+            n_ej = stab.n_ejected
+            if n_ej == 0:
+                self._lbl_ejected_count.setText("0 bodies")
+            else:
+                ej_names = ", ".join(e.name for e in self._sim.system.ejection_history[:3])
+                if len(self._sim.system.ejection_history) > 3:
+                    ej_names += f" (+{len(self._sim.system.ejection_history)-3} more)"
+                self._lbl_ejected_count.setText(f"<b>{n_ej}</b> ({ej_names})")
+
+            if stab.reasons:
+                reasons_html = "<br>• ".join(stab.reasons[:4])
+                if len(stab.reasons) > 4:
+                    reasons_html += f"<br>• ... (+{len(stab.reasons)-4} more)"
+                self._lbl_stability_findings.setText(f"• {reasons_html}")
+            else:
+                self._lbl_stability_findings.setText("<span style='color:#2ecc71;'>All active bodies are dynamically stable and bound; no orbit crossing or perturbers detected.</span>")
 
     def _update_orbital_view(self) -> None:
         target_name = self._combo_target_body.currentText()

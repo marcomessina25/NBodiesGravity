@@ -143,13 +143,72 @@ The diagnostics module (`nbodiesgravity.engine.diagnostics`) provides a reusable
 
 ---
 
-## 6. Numerical Integrity & Failure Protection
+## 6. Numerical Integrity, System Boundaries & Dynamical Stability Assessment
 
-The engine protects against unphysical states:
-1. **Invalid State Detection**: Rejection of NaN or Inf in positions, velocities, or accelerations.
-2. **Timestep Bounds**: Verification that $\Delta t > 0$ and $\Delta t$ is finite.
-3. **Displacement Threshold**: Detection of unphysical single-step leaps ($\Delta r > 100\text{ AU}$).
-4. **State Preservation**: On detection of any `NumericalIntegrityError`, intermediate invalid calculations are discarded, the simulation automatically pauses, the last valid simulation snapshot is retained for rendering, and a diagnostic notification is dispatched to the UI.
+### 6.1 Numerical Blow-Up vs. Physical Ejection
+A critical distinction in astrophysical simulations is between **numerical blow-up** (unphysical calculation failure) and **physical ejection** (gravitational scattering escaping the system):
+
+1. **Numerical Blow-Up (Integrity Failure)**:
+   - Characterized by $\text{NaN}$ or $\pm\infty$ in coordinates, velocities, or accelerations.
+   - Arises from division by zero during unsoftened close approaches ($r \to 0$), arithmetic overflow, or floating-point domain errors.
+   - **Engine Behavior**: Automatically pauses the simulation thread, discards the corrupted step, preserves the last valid snapshot, and emits `blow_up_detected` and `numerical_failure_detected`.
+
+2. **Physical Ejection (Hyperbolic Escape)**:
+   - When a body is perturbed—most notably by adding a companion star, a stellar flyby, or chaotic multi-planet close encounters—it can acquire velocity exceeding the local escape velocity:
+     $$v \ge v_{\rm esc} = \sqrt{\frac{2 G M_{\rm rest}}{r}}$$
+   - In earlier versions of NBodiesGravity, any body reaching $> 1000\text{ AU}$ triggered a simulation-halting "blow-up" error. From a scientific perspective, halting was incorrect: hyperbolic escape is a natural physical consequence of $N$-body gravitational dynamics.
+   - **v1.0.1 Design**: Ejected bodies do **not** pause the simulation. Instead, they are recognized as escaped, excluded from future integration, and reported to the user via an auto-closing warning dialog while the inner system continues executing smoothly.
+
+### 6.2 Scientific & Computational Rationale for Excluding Escaped Bodies
+When a body escapes beyond the outer boundary ($r > 1000\text{ AU}$), excluding it from active $N$-body computation is justified on both physical and computational grounds:
+
+1. **Newtonian $1/r^2$ Decoupling**:
+   - The gravitational acceleration exerted by a body of mass $m_e$ at distance $r \ge 1000\text{ AU}$ on an inner planet at $r_0 \sim 1\text{ AU}$ satisfies:
+     $$a_{\rm pert} \le \frac{G m_e}{(r - r_0)^2} \approx \frac{G m_e}{(999\text{ AU})^2} \approx 10^{-6} \times \frac{G m_e}{(1\text{ AU})^2}$$
+   - For planetary or asteroid masses, this tidal force is many orders of magnitude below numerical integrator precision ($\sim 10^{-16}$) and negligible compared to solar oblateness ($J_2$) or general relativistic corrections. The escaping body is dynamically decoupled from the remaining system.
+2. **Computational Efficiency ($O(N^2)$ Pairwise Scaling)**:
+   - In direct $N$-body solvers, computing pairwise forces scales as $O(N^2)$. Retaining distant bodies wastes CPU cycles evaluating negligible interactions.
+3. **Prevention of Visual & Numerical Scale Collapse**:
+   - In 3D graphics and camera framing, keeping an object at $> 1000\text{ AU}$ compresses the inner planetary system ($0.39 - 30\text{ AU}$) into a sub-pixel clump.
+   - In floating-point arithmetic, computing vector differences $\mathbf{r}_i - \mathbf{r}_j$ between a coordinate at $1000\text{ AU}$ and another at $0.001\text{ AU}$ degrades machine precision (catastrophic cancellation).
+
+### 6.3 Ejection Identification Criteria
+A body is classified as ejected if and only if all of the following conditions are simultaneously satisfied:
+1. **Spatial Boundary**: Distance from the remaining system barycenter exceeds the threshold ($r > r_{\rm min} = 1000\text{ AU}$).
+2. **System Extent Separation**: Distance exceeds a multiple of the remaining system's radial extent ($r \ge 5.0 \times R_{\rm extent}$ or $r \ge 2000\text{ AU}$), validating the monopole approximation.
+3. **Outward Trajectory**: Radial velocity relative to the barycenter is non-negative ($\mathbf{r}_{\rm rel} \cdot \mathbf{v}_{\rm rel} \ge 0$), confirming the body is departing rather than entering from an extreme inbound orbit.
+4. **Gravitationally Unbound ($E \ge 0$)**: The specific mechanical energy w.r.t. the remaining system is positive:
+   $$\varepsilon = \frac{1}{2} |\mathbf{v}_{\rm rel}|^2 - \frac{G M_{\rm rest}}{\sqrt{r_{\rm rel}^2 + \varepsilon_{\rm soft}^2}} \ge 0$$
+   The asymptotic hyperbolic excess speed is recorded:
+   $$v_\infty = \sqrt{2 \varepsilon}$$
+
+### 6.4 Dynamical Stability Assessment (Hill & Holman-Wiegert)
+To inform researchers when an altered configuration (such as adding a star or shifting planetary orbits) is gravitationally stable, the diagnostics engine implements instantaneous heuristic stability metrics (`assess_stability`):
+
+1. **Gladman (1993) Mutual Hill Stability**:
+   For two coplanar, near-circular planets with masses $m_1, m_2 \ll M_*$ and semi-major axes $a_1 < a_2$, the mutual Hill radius is:
+   $$R_{H,m} = \left(\frac{m_1 + m_2}{3 M_*}\right)^{1/3} \frac{a_1 + a_2}{2}$$
+   The normalized orbital separation is $\Delta = \frac{a_2 - a_1}{R_{H,m}}$.
+   - **$\Delta > 2\sqrt{3} \approx 3.46$**: The system is Hill-stable; close encounters and orbit crossing are topologically forbidden.
+   - **$\Delta < 2\sqrt{3}$**: The configuration is Hill-unstable; mutual close encounters and chaotic scattering can occur.
+   - **$3.46 \le \Delta < 5.0$**: The system is flagged as *Marginal* (long-term resonance overlap or chaos possible).
+
+2. **Orbit Crossing Detection**:
+   If the inner planet's apoapsis exceeds the outer planet's periapsis ($Q_1 = a_1(1+e_1) \ge q_2 = a_2(1-e_2)$), the orbits physically intersect. The system is classified as **Unstable** unless protected by mean-motion resonance.
+
+3. **Holman & Wiegert (1999) Critical Binary Radius**:
+   When a companion star ($m_{\rm companion} \ge 0.1 M_{\rm primary}$) is present:
+   - **S-Type (Circumprimary Orbits)**: Planets orbiting the primary are dynamically stable only inside the critical semi-major axis $a_c$:
+     $$a_c = a_b \left(0.464 - 0.380 \mu - 0.631 e_b + 0.586 \mu e_b + 0.150 e_b^2 - 0.198 \mu e_b^2\right)$$
+     where $a_b, e_b$ are the binary semi-major axis and eccentricity, and $\mu = \frac{m_2}{m_1 + m_2}$. Orbits with $a > a_c$ are destabilized and ejected.
+   - **P-Type (Circumbinary Orbits)**: Planets orbiting outside the binary are stable only beyond the inner critical boundary:
+     $$a_c = a_b \left(1.60 + 5.10 e_b - 2.22 e_b^2 + 4.12 \mu - 4.27 e_b \mu - 5.09 \mu^2 + 4.61 e_b^2 \mu^2\right)$$
+
+4. **Live Diagnostic Reporting**:
+   The Scientific Diagnostics dialog presents real-time color badges:
+   - `<span style='color:#2ecc71;'>STABLE</span>`: All bodies Hill-stable, no crossing orbits, binary companions outside critical radii.
+   - `<span style='color:#f39c12;'>MARGINAL</span>`: Narrow Hill separation ($\Delta < 5$) or proximity to binary critical limits.
+   - `<span style='color:#e74c3c;'>UNSTABLE</span>`: Orbit crossings, planets exceeding critical radii, or active ejections.
 
 ---
 

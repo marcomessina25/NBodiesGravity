@@ -89,11 +89,9 @@ def test_simulation_thread_clean_shutdown(qapp):
 
 
 def test_simulation_thread_numerical_blow_up_containment(qapp):
-    """Verify that pathological distance expansion triggers blow_up_detected without crashing."""
-    # Place two bodies, one starting beyond 1000 AU
+    """Verify that pathological NaN/Inf coordinate collapse triggers blow_up_detected and pauses safely."""
     b1 = CelestialBody("Origin", 1e30, np.zeros(3), np.zeros(3), 1000.0, (1.0, 1.0, 1.0))
-    b2 = CelestialBody("Escaped", 1e20, np.array([1005.0, 0.0, 0.0]), np.zeros(3), 100.0, (1.0, 1.0, 1.0))
-    sys = SolarSystem([b1, b2])
+    sys = SolarSystem([b1])
 
     thread = SimulationThread(sys)
     thread.set_timescale(10.0)
@@ -109,6 +107,10 @@ def test_simulation_thread_numerical_blow_up_containment(qapp):
     thread.start()
     thread.resume()
 
+    # Inject NaN coordinates to simulate arithmetic collapse / overflow
+    with thread._lock:
+        thread.system.bodies[0].pos[0] = np.nan
+
     start_wait = time.perf_counter()
     while not blow_up_detected and time.perf_counter() - start_wait < 2.0:
         qapp.processEvents()
@@ -120,3 +122,41 @@ def test_simulation_thread_numerical_blow_up_containment(qapp):
     assert blow_up_detected
     # Thread must be safely paused
     assert not thread.is_playing
+
+
+def test_simulation_thread_ejection_containment(qapp):
+    """Verify that a body escaping beyond 1000 AU is excluded from simulation without halting it."""
+    b1 = CelestialBody("Origin", 1e30, np.zeros(3), np.zeros(3), 1000.0, (1.0, 1.0, 1.0))
+    b2 = CelestialBody("Escaped", 1e20, np.array([1005.0, 0.0, 0.0]), np.array([0.01, 0.0, 0.0]), 100.0, (1.0, 1.0, 1.0))
+    sys = SolarSystem([b1, b2])
+
+    thread = SimulationThread(sys)
+    thread.set_timescale(10.0)
+
+    ejections_received = []
+
+    def on_ejection(events):
+        ejections_received.extend(events)
+
+    thread.ejections_detected.connect(on_ejection)
+
+    thread.start()
+    thread.resume()
+
+    start_wait = time.perf_counter()
+    while not ejections_received and time.perf_counter() - start_wait < 2.0:
+        qapp.processEvents()
+        time.sleep(0.01)
+
+    # Simulation must keep running smoothly — not paused!
+    assert thread.is_playing is True
+    assert len(ejections_received) >= 1
+    assert ejections_received[0].name == "Escaped"
+
+    # Escaped body must be excluded from active bodies
+    with thread._lock:
+        active_names = [b.name for b in thread.system.bodies]
+        assert "Escaped" not in active_names
+
+    thread.stop_thread()
+    thread.wait(1000)

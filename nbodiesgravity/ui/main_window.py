@@ -26,6 +26,7 @@ from nbodiesgravity.ui.body_editor_dialog import BodyEditorDialog
 from nbodiesgravity.ui.body_list_panel import BodyListPanel
 from nbodiesgravity.ui.control_panel import ControlPanel
 from nbodiesgravity.ui.date_loader_worker import DateLoaderWorker
+from nbodiesgravity.ui.ejection_warning_dialog import EjectionWarningDialog
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         self._sim: SimulationThread | None = None
         self._loader: DateLoaderWorker | None = None
         self._progress: QProgressDialog | None = None
+        self._ejection_dialog: EjectionWarningDialog | None = None
         self._last_epoch = datetime(2000, 1, 1)
         self._requested_epoch: datetime | None = None
         self._initial_system: SolarSystem | None = None
@@ -191,6 +193,7 @@ class MainWindow(QMainWindow):
         self._sim.blow_up_detected.connect(self._on_blow_up)
         self._sim.numerical_failure_detected.connect(self._on_numerical_failure)
         self._sim.collisions_detected.connect(self._on_collisions)
+        self._sim.ejections_detected.connect(self._on_ejections)
         display_infos = [
             BodyDisplayInfo(b.name, b.radius, b.color, is_star=(b.label == "star"))
             for b in system.bodies
@@ -760,7 +763,54 @@ class MainWindow(QMainWindow):
 
     def _on_blow_up(self) -> None:
         self._ctrl.set_playing(False)
-        self.statusBar().showMessage("⚠ Blow-up detected (body > 1000 AU). Simulation paused.")
+        self.statusBar().showMessage("⚠ Numerical blow-up detected (NaN/Inf coordinates). Simulation paused.")
+        QMessageBox.critical(
+            self,
+            "Numerical Blow-up",
+            "The simulation was paused due to a numerical integrity failure (non-finite coordinates detected).\n\n"
+            "This indicates arithmetic overflow or a mathematical singularity.",
+        )
+
+    def _on_ejections(self, events: list) -> None:
+        """Handle body ejections reported by the physics thread (UI thread, queued).
+
+        Retargets camera if following an ejected body, clears trails, refreshes the
+        body list and display infos, and displays an auto-closing warning dialog without
+        stopping the simulation.
+        """
+        if self._sim is None or not events:
+            return
+
+        center = self._gl.camera.center_name
+        new_center = center
+        for ev in events:
+            if ev.name == new_center:
+                fallback = next(
+                    (b.name for b in self._sim.system.bodies if b.active and b.name != new_center),
+                    "Sun",
+                )
+                new_center = fallback
+        if new_center != center:
+            self._gl.camera.set_center(new_center)
+            self._ctrl.set_center_name(new_center)
+            self._gl.clear_trails()
+
+        for ev in events:
+            self._gl.clear_trail_for(ev.name)
+
+        self._refresh_after_body_change()
+
+        names = ", ".join(e.name for e in events)
+        self.statusBar().showMessage(
+            f"⚠ Ejection: {names} escaped the system (unbound). Excluded from simulation.",
+            5000,
+        )
+
+        if self._ejection_dialog is not None and self._ejection_dialog.isVisible():
+            self._ejection_dialog.append_events(events)
+        else:
+            self._ejection_dialog = EjectionWarningDialog(events, parent=self, duration_sec=4.0)
+            self._ejection_dialog.show()
 
     def _on_numerical_failure(self, reason: str) -> None:
         self._ctrl.set_playing(False)

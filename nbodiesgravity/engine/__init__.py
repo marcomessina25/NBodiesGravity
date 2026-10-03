@@ -49,6 +49,14 @@ from .exceptions import (
     NumericalIntegrityError,
     ComputationalBudgetExceededError,
 )
+from .stability import (
+    EscapeConfig,
+    EjectionEvent,
+    StabilityStatus,
+    StabilityReport,
+    assess_stability,
+    find_ejected_index,
+)
 
 __all__ = [
     # Kinematics and state
@@ -102,4 +110,11 @@ __all__ = [
     # Exceptions
     "NumericalIntegrityError",
     "ComputationalBudgetExceededError",
+    # Stability and escape
+    "EscapeConfig",
+    "EjectionEvent",
+    "StabilityStatus",
+    "StabilityReport",
+    "assess_stability",
+    "find_ejected_index",
 ]

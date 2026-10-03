@@ -37,6 +37,7 @@ class SimulationThread(QThread):
     blow_up_detected = pyqtSignal()
     numerical_failure_detected = pyqtSignal(str)
     collisions_detected = pyqtSignal(list)   # list[CollisionEvent]
+    ejections_detected = pyqtSignal(list)    # list[EjectionEvent]
     diagnostics_ready = pyqtSignal(object)  # DiagnosticReport
     target_time_reached = pyqtSignal(float)
     step_completed = pyqtSignal(float)  # emits elapsed_days
@@ -130,6 +131,7 @@ class SimulationThread(QThread):
                     integrator_name=getattr(self._system.integrator, "name", "velocity_verlet"),
                     gravity_model=self._system.physics_config.gravity_model,
                     collision_model=self._system.collision_config.model,
+                    ejected=self._system.ejection_history,
                 )
             except TypeError:
                 report = self._tracker.evaluate(snap)
@@ -153,12 +155,21 @@ class SimulationThread(QThread):
         """Advance by exactly one substep while paused. Thread-safe."""
         with self._lock:
             collisions = self._system.step_once(dt)
+            ejections = self._system.pop_recent_ejections()
             step_dt = self._system.last_adaptive_dt
             self._elapsed_days += step_dt
             snap = self._system.snapshot()
             self.latest_snapshot = snap
+            if ejections:
+                self._tracker = ConservationTracker(
+                    self._system.bodies,
+                    softening=self._system.softening,
+                    g_constant=self._system.physics_config.gravitational_constant,
+                )
             if collisions:
                 self.collisions_detected.emit(collisions)
+            if ejections:
+                self.ejections_detected.emit(ejections)
             if self.receivers(self.snapshot_ready) > 0:
                 self.snapshot_ready.emit(snap)
             self._record_diagnostics(snap)
@@ -174,11 +185,20 @@ class SimulationThread(QThread):
                 step_dt = min(remaining, _MAX_SIM_DT)
                 collisions.extend(self._system.step(step_dt))
                 remaining -= step_dt
+            ejections = self._system.pop_recent_ejections()
             self._elapsed_days += duration
             snap = self._system.snapshot()
             self.latest_snapshot = snap
+            if ejections:
+                self._tracker = ConservationTracker(
+                    self._system.bodies,
+                    softening=self._system.softening,
+                    g_constant=self._system.physics_config.gravitational_constant,
+                )
             if collisions:
                 self.collisions_detected.emit(collisions)
+            if ejections:
+                self.ejections_detected.emit(ejections)
             if self.receivers(self.snapshot_ready) > 0:
                 self.snapshot_ready.emit(snap)
             self._record_diagnostics(snap)
@@ -215,6 +235,7 @@ class SimulationThread(QThread):
                     continue
 
             collisions: list = []
+            ejections: list = []
             publish_snap = (t_now - self._last_snap_time >= 0.008)  # ~120 Hz render cadence
             try:
                 with self._lock:
@@ -223,15 +244,24 @@ class SimulationThread(QThread):
                         step_dt = min(remaining, _MAX_SIM_DT)
                         collisions.extend(self._system.step(step_dt))
                         remaining -= step_dt
-                    if publish_snap or collisions:
+                    ejections = self._system.pop_recent_ejections()
+                    if ejections:
+                        self._tracker = ConservationTracker(
+                            self._system.bodies,
+                            softening=self._system.softening,
+                            g_constant=self._system.physics_config.gravitational_constant,
+                        )
+                    if publish_snap or collisions or ejections:
                         snap = self._system.snapshot()
             except NumericalIntegrityError as exc:
                 self._paused = True
                 self.numerical_failure_detected.emit(str(exc))
+                if "nan" in str(exc).lower() or "inf" in str(exc).lower() or "finite" in str(exc).lower():
+                    self.blow_up_detected.emit()
                 continue
 
             self._elapsed_days += sim_dt
-            if publish_snap or collisions:
+            if publish_snap or collisions or ejections:
                 self.latest_snapshot = snap
                 self._last_snap_time = t_now
                 if self.receivers(self.snapshot_ready) > 0:
@@ -241,13 +271,18 @@ class SimulationThread(QThread):
 
             if collisions:
                 self.collisions_detected.emit(collisions)
+            if ejections:
+                self.ejections_detected.emit(ejections)
 
             # Record diagnostics periodically (~20 Hz)
             if t_now - self._last_diag_time >= 0.05:
                 self._last_diag_time = t_now
                 self._record_diagnostics(snap)
 
-            if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() or float(np.linalg.norm(s.pos)) > 1000.0 for s in snap if s.active):
+            # Only genuine numerical singularities (NaN or Inf) trigger blow_up_detected.
+            # Physical ejections beyond the system boundary (> 1000 AU) are naturally
+            # and gracefully handled by ejections_detected without halting the simulation.
+            if any(np.isnan(s.pos).any() or np.isinf(s.pos).any() for s in snap if s.active):
                 self._paused = True
                 self.blow_up_detected.emit()
 
