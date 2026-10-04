@@ -228,6 +228,9 @@ Measured on Windows 11 / Python 3.12 / NumPy 2.x via `scripts/benchmark_scalabil
 ## Project Structure
 
 ```
+.github/
+    workflows/
+        ci.yml                   # Automated continuous integration pipeline for PRs and branch pushes
 docs/
     api.md                       # Public Engine API reference and architectural contracts
     getting_started.md           # User quickstart, UI walkthrough, and workflow guide

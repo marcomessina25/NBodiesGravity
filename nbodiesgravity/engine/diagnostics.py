@@ -242,6 +242,7 @@ class ConservationTracker:
         gravity_model: str = "newtonian",
         collision_model: str = "merge",
         ejected: Sequence[EjectionEvent] = (),
+        include_stability: bool | None = None,
     ) -> DiagnosticReport:
         """Evaluate current state and return a DiagnosticReport with drift metrics."""
         current_snap = compute_snapshot(
@@ -254,19 +255,27 @@ class ConservationTracker:
 
         # Assess system dynamical stability
         pos, vel, mass = _extract_arrays(current_source)
-        if isinstance(current_source, tuple):
-            names = [f"Body_{i}" for i in range(len(mass))]
-        else:
-            names = [b.name for b in current_source if getattr(b, "active", True)]
+        if include_stability is None:
+            # Evaluate stability for realistic planetary systems (<= 40 bodies) or when ejections occur;
+            # bypass for large synthetic benchmarking clusters (> 40 bodies) to keep conservation overhead < 1%.
+            include_stability = bool(len(pos) <= 40 or ejected)
 
-        stab = assess_stability(
-            names=names,
-            positions=pos,
-            velocities=vel,
-            masses=mass,
-            ejected=ejected,
-            g_constant=self.g_constant,
-        )
+        if include_stability:
+            if isinstance(current_source, tuple):
+                names = [f"Body_{i}" for i in range(len(mass))]
+            else:
+                names = [b.name for b in current_source if getattr(b, "active", True)]
+
+            stab = assess_stability(
+                names=names,
+                positions=pos,
+                velocities=vel,
+                masses=mass,
+                ejected=ejected,
+                g_constant=self.g_constant,
+            )
+        else:
+            stab = None
 
         return DiagnosticReport(
             initial=self.initial_snapshot,

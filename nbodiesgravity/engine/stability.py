@@ -218,18 +218,32 @@ def assess_stability(
     stars = [i for i in range(n) if i != ip and masses[i] >= STELLAR_PERTURBER_MASS_RATIO * m_p]
     planets: list[tuple[int, object]] = []   # (index, OrbitalElements about primary)
 
-    def elems(i: int):
-        return compute_orbital_elements(rel_pos[i], rel_vel[i], g_constant * (m_p + masses[i]))
+    _elem_cache: dict[int, object] = {}
 
-    # --- Satellites (inside a host's Hill sphere) are dynamically bound to their host: skip.
-    def is_satellite(i: int) -> bool:
-        for k in range(n):
-            if k in (ip, i) or masses[k] <= masses[i] or k in stars:
-                continue
-            r_hill = dist[k] * (masses[k] / (3.0 * m_p)) ** (1.0 / 3.0)
-            if r_hill > 0 and np.linalg.norm(positions[i] - positions[k]) < r_hill:
-                return True
-        return False
+    def elems(i: int):
+        if i not in _elem_cache:
+            _elem_cache[i] = compute_orbital_elements(rel_pos[i], rel_vel[i], g_constant * (m_p + masses[i]))
+        return _elem_cache[i]
+
+    # --- Precompute potential satellite hosts and their Hill spheres
+    host_indices = [k for k in range(n) if k != ip and k not in stars and masses[k] > 0]
+    if host_indices:
+        h_idx = np.array(host_indices, dtype=int)
+        h_masses = masses[h_idx]
+        h_r_hill_sq = (dist[h_idx] * (h_masses / (3.0 * m_p)) ** (1.0 / 3.0)) ** 2
+        h_positions = positions[h_idx]
+
+        def is_satellite(i: int) -> bool:
+            m_i = masses[i]
+            mask = (h_idx != i) & (h_masses > m_i)
+            if not np.any(mask):
+                return False
+            diff = h_positions[mask] - positions[i]
+            d_sq = np.sum(diff * diff, axis=1)
+            return bool(np.any(d_sq < h_r_hill_sq[mask]))
+    else:
+        def is_satellite(i: int) -> bool:
+            return False
 
     # --- Stellar perturbers: Holman & Wiegert (1999) or flyby test.
     for s in stars:
