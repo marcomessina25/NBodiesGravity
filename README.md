@@ -2,7 +2,7 @@
 
 A real-time 3D N-body gravitational simulation of the Solar System, written in Python with PyQt6 and OpenGL. Watch the planets orbit the Sun, zoom in to see the Moon trace its path around Earth, category-toggle active states and trails, or build your own planetary system from scratch.
 
-![Version](https://img.shields.io/badge/Version-1.0.0-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
+![Version](https://img.shields.io/badge/Version-1.0.1-purple) ![Python](https://img.shields.io/badge/Python-3.12-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![OpenGL](https://img.shields.io/badge/OpenGL-3.3_Core-orange)
 
 ---
 
@@ -20,15 +20,16 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 - **Substep Acceleration Reuse**: Reuses end-of-step acceleration vectors across consecutive Velocity Verlet/Leapfrog substeps, halving expensive pairwise force evaluations in multi-substep integration.
 - **Upper-Triangle Adaptive Timestepping**: Vectorized timescale calculations using upper-triangle indices without full-matrix temporaries or diagonal masking overhead.
 - **Adaptive Timestep Control (`TimeStepConfig`)**: Enforces explicit minimum and maximum bounds ($10^{-5}$ to $1.0$ day), targets $\approx 100$ substeps per shortest orbital period, and caps maximum substeps per tick (10,000) to prevent unbounded loops on pathological systems.
-- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying active integrator metadata, physics/collision models, conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live embedded Matplotlib drift charts, and CSV/JSON export.
+- **Scientific Diagnostics & Orbital Analysis**: Real-time interactive laboratory (`Ctrl+D`) displaying active integrator metadata, physics/collision models, conserved quantities, normalized drift rates, osculating Keplerian orbital elements ($a, e, i, \Omega, \omega, \nu, r_p, r_a, T$), Hill sphere gravitational parent detection, live dynamical stability metrics (Gladman Hill stability, Holman & Wiegert critical binary limits, orbit-crossing detection), live embedded Matplotlib drift charts, and CSV/JSON export.
 - **Drift Tolerance Status Badges**: Visual indicators (`PASS` in green, `WARN` in amber, `ALERT` in red) for energy, linear momentum, angular momentum, and center of mass conservation drift against documented scientific thresholds.
 - **Time-Window Selection & Plot Decimation**: Selectable historical view windows (All Retained History, Last 100 Days, Last 365 Days) with automatic plot decimation to guarantee responsive UI interactions regardless of buffer depth.
-- **Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations, invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
+- **Strict Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations (`NaN`/`Inf`), invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
+- **Dynamic System Boundaries & Escape Handling**: Distinguishes true numerical blow-up from astrophysical hyperbolic escape. Unbound bodies ($E \ge 0$) drifting beyond the escape threshold ($1000\text{ AU}$) are automatically detected as physical ejections and excluded from future $O(N^2)$ force computations and rendering without halting the simulation.
+- **Non-Modal Ejection Warning Alerts**: Transient 4-second auto-closing notification dialogs (`EjectionWarningDialog`) alerting users when bodies leave the system, accompanied by smooth camera retargeting and trail purging if the ejected body was actively tracked.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
 - **Decoupled Snapshot Architecture**: 500 Hz physics background thread decoupled from rendering via throttled 120 Hz immutable snapshots, eliminating heap contention and ensuring thread-safe state sharing.
 - Time unit: **AU / days** in the Solar System Barycenter (SSB) frame.
 - Configurable timescale via a log-scale speed slider (1 h/s to 1 y/s).
-- **Blow-up detection**: simulation auto-pauses if any body drifts beyond 1000 AU from the origin.
 
 ### Solar System Data & Classifications
 
@@ -120,17 +121,19 @@ NBodiesGravity follows Semantic Versioning (`MAJOR.MINOR.PATCH`):
   - **v0.7.0**: Scientific diagnostics, orbital element analysis, physical plotting, and data export.
   - **v0.8.0**: Performance profiling, memory optimization, and scalability characterization.
   - **v0.9.0**: Advanced simulation capabilities, pluggable symplectic integrators (Velocity Verlet & Leapfrog), analytical initial-condition presets, deterministic checkpoints & replay, and controlled stepping.
-  - **v1.0.0** *(current)*: Stable, validated scientific baseline with frozen public engine API, analytical validation matrix, hardening test suite, and comprehensive scientific documentation.
+  - **v1.0.0**: Stable, validated scientific baseline with frozen public engine API, analytical validation matrix, hardening test suite, and comprehensive scientific documentation.
+  - **v1.0.1** *(current)*: Dynamic system boundaries, hyperbolic escape handling, non-modal ejection alerts, and real-time Hill / binary dynamical stability diagnostics.
 
 ### User & Technical Guides
 
 - **[Getting Started Guide](docs/getting_started.md)**: Quickstart, UI walkthrough, 3D navigation, presets, and diagnostics.
 - **[Troubleshooting Guide](docs/troubleshooting.md)**: Resolving numerical drift, OpenGL issues, Horizons network/cache handling, and performance limits.
 - **[Reproducibility Contract](docs/reproducibility.md)**: Bitwise/floating-point reproducibility standards, IEEE-754 serialization, and headless experiment replay.
-- **[Guarantees & Limitations](docs/guarantees_and_limitations.md)**: What the v1.0 engine guarantees vs. known physical and computational boundaries.
+- **[Guarantees & Limitations](docs/guarantees_and_limitations.md)**: What the engine guarantees vs. known physical and computational boundaries.
 - **[Engine API Reference](docs/api.md)**: Public API documentation covering all classes, protocols, units, and thread safety.
-- **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, and validation methodology.
+- **[Numerical Model & Validation Specification](docs/numerical_model.md)**: Mathematical formulations, softening potential, symplectic semantics, escape handling, and validation methodology.
 - **[v1.0.0 Specification](docs/specs/v10.md)**: v1.0 release specification, acceptance criteria, and hardening plan.
+- **[v1.0.1 Specification](docs/specs/v101.md)**: Dynamic system boundaries, escape handling, and dynamical stability diagnostics specification.
 
 ---
 
@@ -181,7 +184,7 @@ The comprehensive automated test suite covers the integrator, collisions, body d
 
 ## Performance & Scalability
 
-NBodiesGravity v1.0.0 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
+NBodiesGravity v1.0.1 delivers an optimized, memory-efficient vectorized $O(N^2)$ Velocity Verlet physics engine that reproduces reference results within $< 10^{-15}$ relative error on the validated workloads:
 
 - **In-place Pairwise Accelerations**: Distance scaling and einsum contractions eliminate intermediate NumPy allocations, cutting single-step time by 2.2x to 9.6x.
 - **Substep Acceleration Reuse**: Halves pairwise acceleration evaluations across consecutive substeps in Velocity Verlet and Leapfrog during adaptive timestepping.
@@ -241,6 +244,7 @@ docs/
         v08.md                   # v0.8.0 performance and scalability specification
         v09.md                   # v0.9.0 advanced simulation capabilities specification
         v10.md                   # v1.0.0 stable scientific simulator specification
+        v101.md                  # v1.0.1 escape handling & dynamical stability diagnostics specification
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F
@@ -253,6 +257,7 @@ nbodiesgravity/
         orbital_elements.py      # Pure-NumPy Keplerian orbital elements solver and primary detection
         physics.py               # Explicit PhysicsConfig and CollisionConfig definitions
         presets.py               # Analytical initial-condition presets and registry
+        stability.py             # Real-time Hill/binary dynamical stability diagnostics and physical escape detection
         system.py                # SolarSystem — step, snapshot, TimeStepConfig, collision resolution
         simulation_thread.py     # QThread physics loop (500 Hz loop, real-time synchronized)
     data/
@@ -273,6 +278,7 @@ nbodiesgravity/
         control_panel.py         # Bottom control bar: date, speed, center, top view, play/pause
         date_loader_worker.py    # QThread for background JPL Horizons fetch
         diagnostics_dialog.py    # Non-modal scientific diagnostics, live Matplotlib plots, and export dialog
+        ejection_warning_dialog.py# Non-modal auto-closing ejection alert notification
         main_window.py           # Top-level window assembly and signal wiring
     main.py                      # Entry point
 scripts/
