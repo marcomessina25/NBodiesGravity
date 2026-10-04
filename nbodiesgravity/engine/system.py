@@ -13,6 +13,7 @@ from .integrator import (
     SOFTENING,
 )
 from .physics import PhysicsConfig, CollisionConfig
+from .stability import EscapeConfig, EjectionEvent, find_ejected_index, AU_DAY_TO_KM_S
 
 #: Kilometres per Astronomical Unit — converts km radii to AU for collision tests.
 KM_PER_AU: float = 1.495978707e8
@@ -127,6 +128,7 @@ class SolarSystem:
         integrator_config: IntegratorConfig | None = None,
         physics_config: PhysicsConfig | None = None,
         collision_config: CollisionConfig | None = None,
+        escape_config: EscapeConfig | None = None,
     ) -> None:
         self._bodies: list[CelestialBody] = list(bodies)
         self._timestep_config = timestep_config if timestep_config is not None else TimeStepConfig()
@@ -181,6 +183,11 @@ class SolarSystem:
         self._cumulative_substeps: int = 0
         self._last_adaptive_dt: float = 0.0
         self._collision_history: list[CollisionEvent] = []
+
+        self._escape_config = escape_config if escape_config is not None else EscapeConfig()
+        self._ejected_bodies: list[CelestialBody] = []
+        self._ejection_history: list[EjectionEvent] = []
+        self._recent_ejections: list[EjectionEvent] = []
 
     @property
     def softening(self) -> float:
@@ -264,6 +271,27 @@ class SolarSystem:
         return list(self._collision_history)
 
     @property
+    def escape_config(self) -> EscapeConfig:
+        return self._escape_config
+
+    @escape_config.setter
+    def escape_config(self, config: EscapeConfig) -> None:
+        self._escape_config = config
+
+    @property
+    def ejected_bodies(self) -> list[CelestialBody]:
+        return list(self._ejected_bodies)
+
+    @property
+    def ejection_history(self) -> list[EjectionEvent]:
+        return list(self._ejection_history)
+
+    def pop_recent_ejections(self) -> list[EjectionEvent]:
+        recent = list(self._recent_ejections)
+        self._recent_ejections.clear()
+        return recent
+
+    @property
     def last_substeps(self) -> int:
         return self._last_substeps
 
@@ -305,13 +333,32 @@ class SolarSystem:
             )
             for b in self._bodies
         ]
-        return SolarSystem(
+        sys = SolarSystem(
             bodies,
             timestep_config=self._timestep_config,
             integrator=create_integrator(self._integrator_config),
             physics_config=self._physics_config,
             collision_config=self._collision_config,
+            escape_config=self._escape_config,
         )
+        sys._collision_history = list(self._collision_history)
+        sys._ejection_history = list(self._ejection_history)
+        sys._ejected_bodies = [
+            CelestialBody(
+                name=b.name,
+                mass=b.mass,
+                pos=b.pos.copy(),
+                vel=b.vel.copy(),
+                radius=b.radius,
+                color=b.color,
+                show_trail=b.show_trail,
+                active=b.active,
+                label=b.label,
+                show_name=b.show_name,
+            )
+            for b in self._ejected_bodies
+        ]
+        return sys
 
     @property
     def bodies(self) -> list[CelestialBody]:
@@ -372,6 +419,11 @@ class SolarSystem:
 
         events = self._resolve_collisions()
         self._collision_history.extend(events)
+
+        ejections = self._resolve_ejections()
+        self._ejection_history.extend(ejections)
+        self._recent_ejections.extend(ejections)
+
         return events
 
     def step_once(self, dt: float | None = None) -> list[CollisionEvent]:
@@ -408,6 +460,11 @@ class SolarSystem:
 
         events = self._resolve_collisions()
         self._collision_history.extend(events)
+
+        ejections = self._resolve_ejections()
+        self._ejection_history.extend(ejections)
+        self._recent_ejections.extend(ejections)
+
         return events
 
     def advance(self, duration: float) -> list[CollisionEvent]:
@@ -483,6 +540,54 @@ class SolarSystem:
 
         return events
 
+    def _resolve_ejections(self) -> list[EjectionEvent]:
+        """Detect and remove active bodies that have escaped the system boundary.
+
+        An active body is considered ejected if it is beyond the system escape
+        distance threshold (default 1000 AU), moving outward, and gravitationally unbound
+        (positive specific energy), or far beyond the system extent. Ejected bodies are
+        deactivated and excluded from future integration steps.
+        """
+        if not self._escape_config.enabled:
+            return []
+
+        ejections: list[EjectionEvent] = []
+        g_val = self._physics_config.gravitational_constant
+        soft_val = self.softening
+
+        while True:
+            active = [b for b in self._bodies if b.active]
+            if len(active) < 2:
+                break
+
+            pos_arr = np.array([b.pos for b in active], dtype=float)
+            vel_arr = np.array([b.vel for b in active], dtype=float)
+            mass_arr = np.array([b.mass for b in active], dtype=float)
+
+            res = find_ejected_index(
+                pos_arr, vel_arr, mass_arr, self._escape_config, g_constant=g_val, softening=soft_val
+            )
+            if res is None:
+                break
+
+            idx, r, speed, v_inf = res
+            ejected = active[idx]
+            ejected.active = False
+            ev = EjectionEvent(
+                name=ejected.name,
+                mass=ejected.mass,
+                distance_au=r,
+                speed_au_day=speed,
+                v_infinity_km_s=v_inf * AU_DAY_TO_KM_S,
+                pos=ejected.pos.copy(),
+                vel=ejected.vel.copy(),
+            )
+            ejections.append(ev)
+            self._ejected_bodies.append(ejected)
+            self._bodies = [b for b in self._bodies if b is not ejected]
+
+        return ejections
+
     def snapshot(self) -> list[BodyState]:
         """Return a thread-safe copy of all body states."""
         return [b.snapshot() for b in self._bodies]
@@ -498,6 +603,9 @@ class SolarSystem:
     def get_body(self, name: str) -> CelestialBody | None:
         """Return the body with the given name, or None if not found."""
         for b in self._bodies:
+            if b.name == name:
+                return b
+        for b in self._ejected_bodies:
             if b.name == name:
                 return b
         return None

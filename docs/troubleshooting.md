@@ -27,12 +27,21 @@ When two bodies experience an ultra-close encounter or a tightly bound orbit, th
 - The simulation automatically preserves the last valid state before the error.
 - If you intend to simulate dense clusters with frequent close flybys, increase `max_substeps` or activate inelastic collision merging (`CollisionConfig.enabled = True`) to merge bodies before singular approach.
 
-### What causes a "Blow-Up Detected" auto-pause?
+### What causes a "Numerical Blow-Up Detected" auto-pause?
 **Cause**:
-If any active body's position expands beyond $1000\text{ AU}$ from the Solar System Barycenter origin or produces NaN/Inf values, the engine halts the simulation to prevent graphical corruption and memory instability.
+If any active body produces NaN or Inf coordinates (due to mathematical singularity, zero-distance division without softening, or floating-point overflow), the engine halts the simulation to prevent graphical crash and corrupt state propagation.
 
 **Remedy**:
-- Check body initial velocities. Unbound bodies with hyperbolic escape velocities will trigger this threshold once they reach deep interstellar space ($> 1000\text{ AU}$).
+- The simulation automatically preserves the last valid state before the error.
+- Check initial conditions and ensure gravitational softening length ($\varepsilon > 0$) is enabled during extreme close encounters.
+
+### What happens when a body leaves the system (> 1,000 AU)?
+**Behavior in v1.0.1**:
+In earlier versions, a body exceeding $1,000\text{ AU}$ triggered a generic blow-up halt. In v1.0.1, the simulator recognizes that adding stars, planetary flybys, or 3-body scattering naturally results in physical **ejections**.
+- When an active body exceeds the system boundary ($r > 1,000\text{ AU}$) on an unbound trajectory ($E \ge 0$), the simulation **does not stop**.
+- An auto-closing warning popup notifies the user of the ejection and reports the asymptotic escape velocity ($v_\infty$).
+- The ejected body is excluded from future N-body computations to conserve performance and prevent coordinate scale collapse, while the remaining solar system continues running smoothly.
+- The **Scientific Diagnostics** dialog (`Ctrl+D`) records the ejection and displays the live dynamical stability status of the system.
 
 ---
 

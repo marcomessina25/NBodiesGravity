@@ -13,6 +13,7 @@ import numpy as np
 
 from .body import CelestialBody, BodyState
 from .integrator import G_AU_DAY, SOFTENING
+from .stability import StabilityReport, EjectionEvent, assess_stability
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class DiagnosticReport:
     integrator_name: str = "velocity_verlet"
     gravity_model: str = "newtonian"
     collision_model: str = "merge"
+    stability: StabilityReport | None = None
 
     @property
     def normalized_momentum_drift(self) -> float:
@@ -239,6 +241,8 @@ class ConservationTracker:
         integrator_name: str = "velocity_verlet",
         gravity_model: str = "newtonian",
         collision_model: str = "merge",
+        ejected: Sequence[EjectionEvent] = (),
+        include_stability: bool | None = None,
     ) -> DiagnosticReport:
         """Evaluate current state and return a DiagnosticReport with drift metrics."""
         current_snap = compute_snapshot(
@@ -248,6 +252,30 @@ class ConservationTracker:
         p_drift = compute_drift(self.initial_snapshot.linear_momentum, current_snap.linear_momentum)
         l_drift = compute_drift(self.initial_snapshot.angular_momentum, current_snap.angular_momentum)
         cm_drift = compute_drift(self.initial_snapshot.center_of_mass, current_snap.center_of_mass)
+
+        # Assess system dynamical stability
+        pos, vel, mass = _extract_arrays(current_source)
+        if include_stability is None:
+            # Evaluate stability for realistic planetary systems (<= 40 bodies) or when ejections occur;
+            # bypass for large synthetic benchmarking clusters (> 40 bodies) to keep conservation overhead < 1%.
+            include_stability = bool(len(pos) <= 40 or ejected)
+
+        if include_stability:
+            if isinstance(current_source, tuple):
+                names = [f"Body_{i}" for i in range(len(mass))]
+            else:
+                names = [b.name for b in current_source if getattr(b, "active", True)]
+
+            stab = assess_stability(
+                names=names,
+                positions=pos,
+                velocities=vel,
+                masses=mass,
+                ejected=ejected,
+                g_constant=self.g_constant,
+            )
+        else:
+            stab = None
 
         return DiagnosticReport(
             initial=self.initial_snapshot,
@@ -259,6 +287,7 @@ class ConservationTracker:
             integrator_name=integrator_name,
             gravity_model=gravity_model,
             collision_model=collision_model,
+            stability=stab,
         )
 
 
