@@ -172,15 +172,22 @@ When a body escapes beyond the outer boundary ($r > 1000\text{ AU}$), excluding 
    - In 3D graphics and camera framing, keeping an object at $> 1000\text{ AU}$ compresses the inner planetary system ($0.39 - 30\text{ AU}$) into a sub-pixel clump.
    - In floating-point arithmetic, computing vector differences $\mathbf{r}_i - \mathbf{r}_j$ between a coordinate at $1000\text{ AU}$ and another at $0.001\text{ AU}$ degrades machine precision (catastrophic cancellation).
 
-### 6.3 Ejection Identification Criteria
-A body is classified as ejected if and only if all of the following conditions are simultaneously satisfied:
+### 6.3 Ejection Identification Criteria & Invariants
+A body is classified as permanently ejected if and only if all four of the following physical criteria are simultaneously satisfied:
 1. **Spatial Boundary**: Distance from the remaining system barycenter exceeds the threshold ($r > r_{\rm min} = 1000\text{ AU}$).
-2. **System Extent Separation**: Distance exceeds a multiple of the remaining system's radial extent ($r \ge 5.0 \times R_{\rm extent}$ or $r \ge 2000\text{ AU}$), validating the monopole approximation.
-3. **Outward Trajectory**: Radial velocity relative to the barycenter is non-negative ($\mathbf{r}_{\rm rel} \cdot \mathbf{v}_{\rm rel} \ge 0$), confirming the body is departing rather than entering from an extreme inbound orbit.
-4. **Gravitationally Unbound ($E \ge 0$)**: The specific mechanical energy w.r.t. the remaining system is positive:
+2. **System Extent Separation**: Distance exceeds a multiple of the remaining system's radial extent ($r > 5.0 \times R_{\rm extent}$), ensuring the escaping body is well outside the cluster and that the monopole potential approximation is valid.
+3. **Outward Radial Motion**: Radial velocity relative to the remaining system's barycenter is strictly positive ($\mathbf{r}_{\rm rel} \cdot \mathbf{v}_{\rm rel} > 0$), confirming the body is actively departing rather than traversing on an inbound trajectory.
+4. **Gravitationally Unbound ($\varepsilon \ge 0$)**: The specific mechanical orbital energy w.r.t. the remaining system is non-negative:
    $$\varepsilon = \frac{1}{2} |\mathbf{v}_{\rm rel}|^2 - \frac{G M_{\rm rest}}{\sqrt{r_{\rm rel}^2 + \varepsilon_{\rm soft}^2}} \ge 0$$
    The asymptotic hyperbolic excess speed is recorded:
    $$v_\infty = \sqrt{2 \varepsilon}$$
+
+**Fundamental Physical Invariant**:  
+> *Being far away is not the same as being ejected.*  
+A body with negative specific orbital energy ($\varepsilon < 0$) must **never** be classified as permanently ejected solely based on distance. Extremely distant bound bodies (such as extreme trans-Neptunian objects or cometary analogs on highly eccentric Keplerian orbits) will reach distant apocenters and eventually return to the inner system.
+
+**Heuristic Scope & Monopole Approximation**:  
+The specific energy calculation uses the remaining system's total mass $M_{\rm rest}$ situated at the barycenter $\mathbf{r}_{\rm com, rest}$. This monopole approximation is an intentional, scientifically defensible heuristic tailored for hierarchical stellar-centric and multi-star systems where $r \gg R_{\rm extent}$. It provides an accurate practical boundary without attempting to solve the general, non-hierarchical chaotic $N$-body escape problem.
 
 ### 6.4 Dynamical Stability Assessment (Hill & Holman-Wiegert)
 To inform researchers when an altered configuration (such as adding a star or shifting planetary orbits) is gravitationally stable, the diagnostics engine implements instantaneous heuristic stability metrics (`assess_stability`):

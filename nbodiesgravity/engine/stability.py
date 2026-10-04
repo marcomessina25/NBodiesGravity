@@ -93,7 +93,29 @@ def find_ejected_index(
     g_constant: float = G_AU_DAY,
     softening: float = SOFTENING,
 ) -> tuple[int, float, float, float] | None:
-    """Return ``(index, distance, speed, v_inf_au_day)`` of the farthest ejected body, else None."""
+    """Return ``(index, distance, speed, v_inf_au_day)`` of the farthest ejected body, else None.
+
+    Scientific Ejection Invariants:
+    -------------------------------
+    Distance alone can NEVER cause a gravitationally bound body to be classified as
+    permanently ejected. Highly eccentric bound bodies (e.g., Sedna or Oort cloud
+    analogs) will reach distant apocenters and eventually return to the inner system.
+
+    An object is classified as permanently ejected if and only if ALL four of the
+    following physical conditions are simultaneously satisfied:
+      1. Far enough: r > config.min_distance_au (sufficient separation from barycenter).
+      2. Outside extent: r > config.extent_factor * extent (far beyond remaining system).
+      3. Moving outward: radial_velocity = dot(r_vec, v_vec) / r > 0.
+      4. Gravitationally unbound: specific_energy = 0.5 * |v|² - G * M_rest / sqrt(r² + ε²) >= 0.
+
+    Heuristic Scope & Monopole Approximation:
+    -----------------------------------------
+    The specific energy calculation uses the remaining system's total mass M_rest
+    at its barycenter com_rest (monopole approximation). This is an accurate,
+    defensible heuristic for hierarchical and stellar-centric systems where the
+    ejected body is far beyond the system extent (r >> extent). It is an intentional
+    engineering approximation, not a general non-hierarchical chaotic N-body escape solver.
+    """
     n = len(masses)
     if not config.enabled or n < 2:
         return None
@@ -118,18 +140,31 @@ def find_ejected_index(
         r_vec = positions[i] - com_rest
         v_vec = velocities[i] - v_rest
         r = float(np.linalg.norm(r_vec))
+
+        # Condition 1: Sufficient distance threshold
         if r <= config.min_distance_au:
             continue
+
+        # Condition 2: Outside the meaningful spatial extent of the remaining system
         mask = np.ones(n, dtype=bool)
         mask[i] = False
         extent = float(np.max(np.linalg.norm(positions[mask] - com_rest, axis=1)))
-        if r < config.extent_factor * extent and r < config.min_distance_au * 2.0:
+        if r <= config.extent_factor * extent:
             continue
-        rad_vel = float(np.dot(r_vec, v_vec))
+
+        # Condition 3: Moving outward radially (radial velocity > 0)
+        rad_vel_proj = float(np.dot(r_vec, v_vec))
+        if rad_vel_proj <= 0.0:
+            continue
+
+        # Condition 4: Gravitationally unbound (specific orbital energy >= 0)
+        # Crucial invariant: A body with specific_energy < 0 must NEVER be ejected,
+        # regardless of how far it has travelled.
         eps = 0.5 * float(np.dot(v_vec, v_vec)) - g_constant * m_rest / np.sqrt(r * r + softening ** 2)
-        if rad_vel < 0.0 and eps < 0.0 and r < config.min_distance_au * 2.0:
+        if eps < 0.0:
             continue
-        v_inf = float(np.sqrt(2.0 * max(0.0, eps)))
+
+        v_inf = float(np.sqrt(2.0 * eps))
         best = (int(i), r, float(np.linalg.norm(v_vec)), v_inf)
         break
     return best

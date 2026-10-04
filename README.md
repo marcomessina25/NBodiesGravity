@@ -24,7 +24,7 @@ A real-time 3D N-body gravitational simulation of the Solar System, written in P
 - **Drift Tolerance Status Badges**: Visual indicators (`PASS` in green, `WARN` in amber, `ALERT` in red) for energy, linear momentum, angular momentum, and center of mass conservation drift against documented scientific thresholds.
 - **Time-Window Selection & Plot Decimation**: Selectable historical view windows (All Retained History, Last 100 Days, Last 365 Days) with automatic plot decimation to guarantee responsive UI interactions regardless of buffer depth.
 - **Strict Numerical Integrity Protection**: Halts simulation safely upon detecting non-finite coordinates, velocities, accelerations (`NaN`/`Inf`), invalid timesteps, or extreme single-step displacements, strictly preserving the last known valid state.
-- **Dynamic System Boundaries & Escape Handling**: Distinguishes true numerical blow-up from astrophysical hyperbolic escape. Unbound bodies ($E \ge 0$) drifting beyond the escape threshold ($1000\text{ AU}$) are automatically detected as physical ejections and excluded from future $O(N^2)$ force computations and rendering without halting the simulation.
+- **Dynamic System Boundaries & Escape Handling**: Distinguishes true numerical blow-up from astrophysical hyperbolic escape. Unbound bodies ($E \ge 0, v_r > 0$) drifting beyond the escape threshold ($1000\text{ AU}$) outside system extent are automatically detected as physical ejections and excluded from future $O(N^2)$ force computations and rendering without halting the simulation. Distant bound bodies ($E < 0$) on eccentric orbits are strictly retained.
 - **Non-Modal Ejection Warning Alerts**: Transient 4-second auto-closing notification dialogs (`EjectionWarningDialog`) alerting users when bodies leave the system, accompanied by smooth camera retargeting and trail purging if the ejected body was actively tracked.
 - **Center-of-Mass Conserving Mergers**: Inelastic collisions where larger masses absorb smaller bodies, strictly conserving total mass, linear momentum, center of mass, and equal-density volume.
 - **Decoupled Snapshot Architecture**: 500 Hz physics background thread decoupled from rendering via throttled 120 Hz immutable snapshots, eliminating heap contention and ensuring thread-safe state sharing.
@@ -248,6 +248,7 @@ docs/
         v09.md                   # v0.9.0 advanced simulation capabilities specification
         v10.md                   # v1.0.0 stable scientific simulator specification
         v101.md                  # v1.0.1 escape handling & dynamical stability diagnostics specification
+        v101_items_left.md       # v1.0.1 pre-merge checklist and scientific verification tracking
 nbodiesgravity/
     engine/
         benchmarks.py            # Canonical deterministic benchmarks A through F

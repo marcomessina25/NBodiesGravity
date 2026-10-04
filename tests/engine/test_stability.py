@@ -29,32 +29,66 @@ def test_escape_config_validation():
         EscapeConfig(extent_factor=0.5)
 
 
-def test_find_ejected_index_bound_vs_unbound():
-    cfg = EscapeConfig(min_distance_au=1000.0)
+def test_find_ejected_index_cases_a_through_f():
+    """Verify that being far away is NOT the same as being ejected.
+
+    An object is ejected if and only if:
+    (r > min_dist) AND (r > extent_factor * extent) AND (rad_vel > 0) AND (specific_energy >= 0).
+    """
+    cfg = EscapeConfig(min_distance_au=1000.0, extent_factor=5.0)
     m_sun = 1.989e30
+    m_planet = 1e24
 
-    # Case 1: Planet at 1005 AU with zero velocity (bound, moving inward soon)
-    pos = np.array([[0.0, 0.0, 0.0], [1005.0, 0.0, 0.0]])
-    vel = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
-    masses = np.array([m_sun, 1e24])
+    # Two-body system: Sun at origin, planet tested at various distances/velocities
+    # System extent is defined by the remaining bodies (Sun at origin, extent = 0; if multiple, actual extent)
+    # We add an inner planet at 1.0 AU so the remaining system extent is 1.0 AU.
+    pos_sun = np.array([0.0, 0.0, 0.0])
+    vel_sun = np.array([0.0, 0.0, 0.0])
+    pos_earth = np.array([1.0, 0.0, 0.0])
+    vel_earth = np.array([0.0, 0.0172, 0.0])
+    m_earth = 5.972e24
 
-    res = find_ejected_index(pos, vel, masses, cfg)
-    # At v=0, rad_vel=0, eps < 0 -> not unbound inward, but rad_vel >= 0 holds
-    assert res is not None
-    assert res[0] == 1
-    assert res[1] > 1000.0
+    # Escape velocity at 1005 AU is v_esc = sqrt(2 * G * M / r) ~ 7.67e-4 AU/day
+    v_esc_1005 = np.sqrt(2.0 * G_AU_DAY * (m_sun + m_earth) / 1005.0)
 
-    # Case 2: Planet moving outward at high speed (> escape velocity)
-    vel_outward = np.array([[0.0, 0.0, 0.0], [0.05, 0.0, 0.0]])  # ~86 km/s
-    res_out = find_ejected_index(pos, vel_outward, masses, cfg)
-    assert res_out is not None
-    assert res_out[0] == 1
-    assert res_out[3] > 0.0  # positive asymptotic speed v_inf
+    # Case A: Distant but bound (r > 1000 AU, rad_vel >= 0, specific_energy < 0)
+    # Subcase A1: v = 0 (bound, v < v_esc) -> NOT EJECTED
+    pos_a1 = np.array([pos_sun, pos_earth, [1005.0, 0.0, 0.0]])
+    vel_a1 = np.array([vel_sun, vel_earth, [0.0, 0.0, 0.0]])
+    masses = np.array([m_sun, m_earth, m_planet])
+    assert find_ejected_index(pos_a1, vel_a1, masses, cfg) is None
 
-    # Case 3: Inner planet at 1 AU
-    pos_inner = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
-    vel_inner = np.array([[0.0, 0.0, 0.0], [0.0, 0.0172, 0.0]])
-    assert find_ejected_index(pos_inner, vel_inner, masses, cfg) is None
+    # Subcase A2: v > 0 outward but v < v_esc (e.g. 0.5 * v_esc) -> bound, NOT EJECTED
+    vel_a2 = np.array([vel_sun, vel_earth, [0.5 * v_esc_1005, 0.0, 0.0]])
+    assert find_ejected_index(pos_a1, vel_a2, masses, cfg) is None
+
+    # Case B: Distant, bound and moving inward (r > 1000 AU, rad_vel < 0, specific_energy < 0)
+    vel_b = np.array([vel_sun, vel_earth, [-0.5 * v_esc_1005, 0.0, 0.0]])
+    assert find_ejected_index(pos_a1, vel_b, masses, cfg) is None
+
+    # Case C: Distant, unbound but moving inward (r > 1000 AU, rad_vel < 0, specific_energy >= 0)
+    # High inward speed (e.g. 0.02 AU/day) -> unbound trajectory, but heading inward -> NOT EJECTED
+    vel_c = np.array([vel_sun, vel_earth, [-0.02, 0.0, 0.0]])
+    assert find_ejected_index(pos_a1, vel_c, masses, cfg) is None
+
+    # Case D: Genuine ejection (r > 1000 AU, outside extent, rad_vel > 0, specific_energy >= 0)
+    vel_d = np.array([vel_sun, vel_earth, [0.02, 0.0, 0.0]])  # ~34.7 km/s outward
+    res_d = find_ejected_index(pos_a1, vel_d, masses, cfg)
+    assert res_d is not None
+    assert res_d[0] == 2  # index of the ejected planet
+    assert res_d[1] > 1000.0  # distance
+    assert res_d[3] > 0.0  # positive v_infinity
+
+    # Case E: Unbound but not far enough (r < 1000 AU, rad_vel > 0, specific_energy >= 0)
+    pos_e = np.array([pos_sun, pos_earth, [500.0, 0.0, 0.0]])  # 500 AU < 1000 AU
+    vel_e = np.array([vel_sun, vel_earth, [0.02, 0.0, 0.0]])
+    assert find_ejected_index(pos_e, vel_e, masses, cfg) is None
+
+    # Case F: Far away but still bound (r = 5000 AU, v = 0 or v < v_esc) -> NOT EJECTED
+    # Protects against distance-only threshold reintroduction
+    pos_f = np.array([pos_sun, pos_earth, [5000.0, 0.0, 0.0]])
+    vel_f = np.array([vel_sun, vel_earth, [0.0, 0.0, 0.0]])
+    assert find_ejected_index(pos_f, vel_f, masses, cfg) is None
 
 
 def test_gladman_hill_stability():
